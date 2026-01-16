@@ -1,0 +1,225 @@
+import React, { useState, useRef } from 'react';
+import { useData } from '../context/DataContext';
+
+const Settings: React.FC = () => {
+    const { userProfile, updateUserProfile } = useData();
+    const fileInputRef = useRef<HTMLInputElement>(null);
+    const [isSaved, setIsSaved] = useState(false);
+
+    // Estados locales para el formulario del perfil
+    const [formData, setFormData] = useState({
+        name: userProfile.name,
+        role: userProfile.role,
+        specialty: userProfile.specialty,
+        phone: userProfile.phone,
+        email: userProfile.email,
+        avatar: userProfile.avatar,
+        isGoogleCalendarConnected: userProfile.isGoogleCalendarConnected,
+        schedule: userProfile.schedule
+    });
+
+    const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+        const { name, value } = e.target;
+        setFormData(prev => ({ ...prev, [name]: value }));
+    };
+
+    const handleScheduleChange = (index: number, field: string, value: any) => {
+        const newSchedule = [...formData.schedule];
+        newSchedule[index] = { ...newSchedule[index], [field]: value };
+        setFormData(prev => ({ ...prev, schedule: newSchedule }));
+    };
+
+    const handlePhotoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0];
+        if (file) {
+            const reader = new FileReader();
+            reader.onloadend = () => {
+                setFormData(prev => ({ ...prev, avatar: reader.result as string }));
+            };
+            reader.readAsDataURL(file);
+        }
+    };
+
+    const triggerFileInput = () => {
+        fileInputRef.current?.click();
+    };
+
+    const handleSave = () => {
+        updateUserProfile(formData);
+        setIsSaved(true);
+        setTimeout(() => setIsSaved(false), 3000);
+    };
+
+    const toggleGoogleCalendar = () => {
+        setFormData(prev => ({ ...prev, isGoogleCalendarConnected: !prev.isGoogleCalendarConnected }));
+    };
+
+    return (
+        <div className="px-4 md:px-10 lg:px-40 flex flex-1 justify-center py-8">
+            <div className="layout-content-container flex flex-col w-full max-w-[960px] flex-1 gap-8">
+                {/* Page Header */}
+                <div className="flex flex-wrap justify-between items-center gap-4 sticky top-0 bg-background-light dark:bg-background-dark z-20 py-4 -my-4 backdrop-blur-sm bg-opacity-90">
+                    <div>
+                        <h1 className="text-[#111618] dark:text-white text-3xl md:text-4xl font-black leading-tight tracking-[-0.033em]">Configuración</h1>
+                        <p className="text-[#617c89] dark:text-gray-400 mt-2 text-sm">Personaliza tu perfil y la configuración de la tienda.</p>
+                    </div>
+                    <button 
+                        onClick={handleSave}
+                        className="flex min-w-[84px] cursor-pointer items-center justify-center overflow-hidden rounded-full h-11 px-6 bg-primary text-white text-sm font-bold leading-normal tracking-[0.015em] shadow-lg shadow-primary/30 hover:bg-primary/90 transition-all active:scale-95 group"
+                    >
+                        {isSaved ? (
+                            <span className="flex items-center gap-2"><span className="material-symbols-outlined text-[18px]">check</span>Guardado</span>
+                        ) : (
+                            <span className="truncate">Guardar cambios</span>
+                        )}
+                    </button>
+                </div>
+
+                {/* Grid Layout */}
+                <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                    {/* Left Column (Main Settings) */}
+                    <div className="lg:col-span-2 flex flex-col gap-6">
+                        
+                        {/* Profile Card */}
+                        <div className="bg-white dark:bg-gray-900 rounded-xl p-6 shadow-sm border border-[#f0f3f4] dark:border-gray-800">
+                            <h3 className="text-lg font-bold mb-6 flex items-center gap-2">
+                                <span className="material-symbols-outlined text-primary">person</span>
+                                Datos Personales
+                            </h3>
+                            <div className="flex flex-col sm:flex-row items-center sm:items-start gap-6 mb-8">
+                                <div className="relative group cursor-pointer" onClick={triggerFileInput}>
+                                    <div className="bg-center bg-no-repeat aspect-square bg-cover rounded-full size-24 md:size-32 shadow-inner border-4 border-white dark:border-gray-800" style={{backgroundImage: `url("${formData.avatar}")`}}></div>
+                                    <div className="absolute inset-0 bg-black/40 rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+                                        <span className="material-symbols-outlined text-white">camera_alt</span>
+                                    </div>
+                                    <input type="file" ref={fileInputRef} onChange={handlePhotoUpload} className="hidden" accept="image/*" />
+                                </div>
+                                <div className="flex flex-col gap-2 flex-1 w-full text-center sm:text-left">
+                                    <div className="flex flex-col gap-1">
+                                        <h4 className="text-xl font-bold dark:text-white">{formData.name || 'Tu Nombre'}</h4>
+                                        <p className="text-[#617c89] dark:text-gray-400">{formData.role}</p>
+                                    </div>
+                                    <button onClick={triggerFileInput} className="mt-2 text-primary font-bold text-sm hover:underline self-center sm:self-start">Cambiar Foto</button>
+                                </div>
+                            </div>
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+                                <label className="flex flex-col gap-2">
+                                    <span className="text-sm font-bold text-[#111618] dark:text-gray-200">Nombre Completo</span>
+                                    <input name="name" onChange={handleChange} value={formData.name} className="form-input w-full rounded-xl border border-[#dbe2e6] dark:border-gray-700 bg-[#f8fafc] dark:bg-gray-800 px-4 h-12 text-sm focus:border-primary focus:ring-primary dark:text-white" type="text"/>
+                                </label>
+                                <label className="flex flex-col gap-2">
+                                    <span className="text-sm font-bold text-[#111618] dark:text-gray-200">Rol / Cargo</span>
+                                    <input name="role" onChange={handleChange} value={formData.role} className="form-input w-full rounded-xl border border-[#dbe2e6] dark:border-gray-700 bg-[#f8fafc] dark:bg-gray-800 px-4 h-12 text-sm focus:border-primary focus:ring-primary dark:text-white" type="text"/>
+                                </label>
+                                <label className="flex flex-col gap-2">
+                                    <span className="text-sm font-bold text-[#111618] dark:text-gray-200">Especialidad</span>
+                                    <input name="specialty" onChange={handleChange} value={formData.specialty} className="form-input w-full rounded-xl border border-[#dbe2e6] dark:border-gray-700 bg-[#f8fafc] dark:bg-gray-800 px-4 h-12 text-sm focus:border-primary focus:ring-primary dark:text-white" type="text"/>
+                                </label>
+                                <label className="flex flex-col gap-2">
+                                    <span className="text-sm font-bold text-[#111618] dark:text-gray-200">Teléfono</span>
+                                    <input name="phone" onChange={handleChange} value={formData.phone} className="form-input w-full rounded-xl border border-[#dbe2e6] dark:border-gray-700 bg-[#f8fafc] dark:bg-gray-800 px-4 h-12 text-sm focus:border-primary focus:ring-primary dark:text-white" type="tel"/>
+                                </label>
+                                <div className="md:col-span-2">
+                                    <label className="flex flex-col gap-2">
+                                        <span className="text-sm font-bold text-[#111618] dark:text-gray-200">Correo Electrónico</span>
+                                        <input name="email" onChange={handleChange} value={formData.email} className="form-input w-full rounded-xl border border-[#dbe2e6] dark:border-gray-700 bg-[#f8fafc] dark:bg-gray-800 px-4 h-12 text-sm focus:border-primary focus:ring-primary dark:text-white" type="email"/>
+                                    </label>
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* Integrations */}
+                        <div className="bg-white dark:bg-gray-900 rounded-xl p-6 shadow-sm border border-[#f0f3f4] dark:border-gray-800">
+                            <h3 className="text-lg font-bold mb-6 flex items-center gap-2"><span className="material-symbols-outlined text-primary">sync_alt</span>Sincronización</h3>
+                            <div className="flex flex-col md:flex-row items-center justify-between gap-6 p-5 rounded-xl bg-[#f8fafc] dark:bg-gray-800 border border-[#eff1f3] dark:border-gray-700">
+                                <div className="flex items-center gap-4">
+                                    <div className="bg-white dark:bg-gray-700 p-3 rounded-full shadow-sm">
+                                        <img src="https://upload.wikimedia.org/wikipedia/commons/a/a5/Google_Calendar_icon_%282020%29.svg" alt="Google Calendar" className="w-8 h-8"/>
+                                    </div>
+                                    <div>
+                                        <h4 className="font-bold text-[#111618] dark:text-white">Google Calendar</h4>
+                                        <p className="text-sm text-[#617c89] dark:text-gray-400 mt-1">
+                                            {formData.isGoogleCalendarConnected 
+                                                ? 'Tus citas se sincronizan automáticamente.' 
+                                                : 'Conecta para evitar conflictos de horario.'}
+                                        </p>
+                                    </div>
+                                </div>
+                                <button 
+                                    onClick={toggleGoogleCalendar}
+                                    className={`flex items-center gap-2 px-4 py-2 rounded-full text-xs font-bold transition-all ${
+                                        formData.isGoogleCalendarConnected 
+                                        ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400 border border-green-200 dark:border-green-800' 
+                                        : 'bg-white border border-gray-300 text-gray-700 hover:bg-gray-50 dark:bg-gray-700 dark:border-gray-600 dark:text-white'
+                                    }`}
+                                >
+                                    {formData.isGoogleCalendarConnected ? (
+                                        <><span className="material-symbols-outlined text-[16px]">check_circle</span>Conectado</>
+                                    ) : (
+                                        <><span className="material-symbols-outlined text-[16px]">link_off</span>Conectar</>
+                                    )}
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* Right Column (Schedule) */}
+                    <div className="lg:col-span-1 flex flex-col gap-6">
+                        <div className="bg-white dark:bg-gray-900 rounded-xl p-6 shadow-sm border border-[#f0f3f4] dark:border-gray-800 h-full flex flex-col">
+                            <div className="flex justify-between items-start mb-2">
+                                <div>
+                                    <h3 className="text-lg font-bold flex items-center gap-2"><span className="material-symbols-outlined text-primary">schedule</span>Horario</h3>
+                                    <p className="text-xs text-gray-500 mt-1">Define tu disponibilidad semanal para citas.</p>
+                                </div>
+                            </div>
+                            
+                            <div className="flex-1 overflow-y-auto pr-1 space-y-6 mt-4">
+                                {formData.schedule.map((day, index) => (
+                                    <div key={day.day} className="flex flex-col gap-2 pb-4 border-b border-dashed border-gray-100 dark:border-gray-700 last:border-0">
+                                        <div className="flex items-center justify-between">
+                                            <span className={`font-bold text-sm ${day.enabled ? 'text-gray-800 dark:text-gray-200' : 'text-gray-400 dark:text-gray-500'}`}>{day.day}</span>
+                                            <div className="relative inline-block w-10 align-middle select-none transition duration-200 ease-in">
+                                                <input 
+                                                    type="checkbox" 
+                                                    checked={day.enabled}
+                                                    onChange={(e) => handleScheduleChange(index, 'enabled', e.target.checked)}
+                                                    className="toggle-checkbox absolute block w-5 h-5 rounded-full bg-white border-4 appearance-none cursor-pointer border-gray-300 dark:border-gray-600 checked:right-0 checked:border-primary transition-all duration-200 top-0 left-0"
+                                                />
+                                                <label className={`toggle-label block overflow-hidden h-5 rounded-full cursor-pointer transition-colors duration-200 ${day.enabled ? 'bg-primary' : 'bg-gray-200 dark:bg-gray-700'}`}></label>
+                                            </div>
+                                        </div>
+                                        
+                                        {/* Inputs Logic similar to screenshot */}
+                                        {day.enabled ? (
+                                            <div className="flex gap-2 items-center mt-1 animate-in fade-in duration-200">
+                                                <input 
+                                                    value={day.start}
+                                                    onChange={(e) => handleScheduleChange(index, 'start', e.target.value)}
+                                                    className="w-full text-xs font-medium bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl py-2 px-3 text-center dark:text-white focus:border-primary focus:ring-1 focus:ring-primary outline-none" 
+                                                    type="time" 
+                                                />
+                                                <span className="text-gray-400 text-xs">-</span>
+                                                <input 
+                                                    value={day.end}
+                                                    onChange={(e) => handleScheduleChange(index, 'end', e.target.value)}
+                                                    className="w-full text-xs font-medium bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl py-2 px-3 text-center dark:text-white focus:border-primary focus:ring-1 focus:ring-primary outline-none" 
+                                                    type="time" 
+                                                />
+                                            </div>
+                                        ) : (
+                                            <div className="mt-2 text-center py-2">
+                                                <span className="text-[10px] font-bold tracking-widest text-[#ff8a80] uppercase">Cerrado</span>
+                                            </div>
+                                        )}
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    );
+};
+
+export default Settings;
