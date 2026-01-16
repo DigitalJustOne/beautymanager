@@ -25,9 +25,24 @@ const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
 
     // Función para manejar el cierre de sesión
     const handleLogout = async () => {
-        if (window.confirm('¿Estás seguro de que deseas cerrar sesión?')) {
-            await signOut();
-            navigate('/login', { replace: true });
+        console.log("Intento de cerrar sesión - Click recibido");
+        const confirmed = window.confirm('¿Estás seguro de que deseas cerrar sesión?');
+        console.log("Confirmación de usuario:", confirmed);
+
+        if (confirmed) {
+            try {
+                console.log("Ejecutando signOut...");
+                await signOut();
+                console.log("signOut finalizado. Redirigiendo...");
+                // Force hash change and reload to clear all memory state
+                window.location.replace('/#/login');
+                window.location.reload();
+            } catch (error) {
+                console.error("Error al cerrar sesión (Catch):", error);
+                // Fallback manual
+                window.location.replace('/#/login');
+                window.location.reload();
+            }
         }
     };
 
@@ -49,10 +64,10 @@ const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
                         </div>
 
                         {/* Navigation Links */}
-                        <nav className="flex flex-col gap-2">
+                        <nav className="flex flex-col gap-2 flex-1 overflow-y-auto min-h-0 pt-4 pb-2">
                             {menuItems.filter(item => {
                                 if (userProfile.role === 'admin') return true;
-                                if (userProfile.role === 'professional') return ['Dashboard', 'Agenda', 'Settings'].includes(item.label);
+                                if (userProfile.role === 'professional') return ['Dashboard', 'Agenda', 'Ajustes'].includes(item.label);
                                 if (userProfile.role === 'client') return ['Dashboard', 'Ajustes'].includes(item.label);
                                 return false; // Default hidden
                             }).map((item) => {
@@ -67,7 +82,7 @@ const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
                                     <Link
                                         key={item.path}
                                         to={path}
-                                        className={`flex items-center gap-3 px-4 py-3 rounded-full transition-all ${location.pathname === path
+                                        className={`flex items-center gap-3 px-4 py-3 rounded-full transition-all shrink-0 ${location.pathname === path
                                             ? 'bg-primary/10 text-primary'
                                             : 'text-text-sec-light dark:text-text-sec-dark hover:bg-background-light dark:hover:bg-background-dark hover:text-text-main-light dark:hover:text-text-main-dark'
                                             }`}
@@ -81,13 +96,15 @@ const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
                     </div>
 
                     {/* Logout */}
-                    <button
-                        onClick={handleLogout}
-                        className="flex w-full items-center justify-center gap-2 rounded-full h-12 px-4 bg-transparent border border-border-light dark:border-border-dark text-text-sec-light dark:text-text-sec-dark hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-900/10 dark:hover:text-red-400 hover:border-red-200 dark:hover:border-red-800 transition-all cursor-pointer"
-                    >
-                        <span className="material-symbols-outlined text-[20px]">logout</span>
-                        <span className="text-sm font-bold">Cerrar Sesión</span>
-                    </button>
+                    <div className="pt-4 border-t border-border-light dark:border-border-dark mt-auto">
+                        <button
+                            onClick={handleLogout}
+                            className="flex w-full items-center justify-center gap-2 rounded-full h-12 px-4 bg-transparent border border-border-light dark:border-border-dark text-text-sec-light dark:text-text-sec-dark hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-900/10 dark:hover:text-red-400 hover:border-red-200 dark:hover:border-red-800 transition-all cursor-pointer"
+                        >
+                            <span className="material-symbols-outlined text-[20px]">logout</span>
+                            <span className="text-sm font-bold">Cerrar Sesión</span>
+                        </button>
+                    </div>
                 </div>
             </aside>
 
@@ -112,7 +129,7 @@ const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
                         <nav className="flex flex-col gap-2">
                             {menuItems.filter(item => {
                                 if (userProfile.role === 'admin') return true;
-                                if (userProfile.role === 'professional') return ['Dashboard', 'Agenda', 'Settings'].includes(item.label);
+                                if (userProfile.role === 'professional') return ['Dashboard', 'Agenda', 'Ajustes'].includes(item.label);
                                 if (userProfile.role === 'client') return ['Dashboard', 'Ajustes'].includes(item.label);
                                 return false;
                             }).map((item) => {
@@ -127,8 +144,8 @@ const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
                                         to={path}
                                         onClick={closeMobileMenu}
                                         className={`flex items-center gap-3 px-4 py-3 rounded-full transition-all ${location.pathname === path
-                                                ? 'bg-primary/10 text-primary'
-                                                : 'text-text-sec-light dark:text-text-sec-dark hover:bg-background-light dark:hover:bg-background-dark'
+                                            ? 'bg-primary/10 text-primary'
+                                            : 'text-text-sec-light dark:text-text-sec-dark hover:bg-background-light dark:hover:bg-background-dark'
                                             }`}
                                     >
                                         <span className={`material-symbols-outlined ${location.pathname === path ? 'fill' : ''}`}>{item.icon}</span>
@@ -141,7 +158,7 @@ const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
                     {/* Mobile Logout */}
                     <button
                         onClick={handleLogout}
-                        className="flex w-full items-center justify-center gap-2 rounded-full h-12 px-4 bg-transparent border border-border-light dark:border-border-dark text-text-sec-light dark:text-text-sec-dark hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-900/10 dark:hover:text-red-400 hover:border-red-200 dark:hover:border-red-800 transition-all cursor-pointer"
+                        className="flex w-full items-center justify-center gap-2 rounded-full h-12 px-4 bg-transparent border border-border-light dark:border-border-dark text-text-sec-light dark:text-text-sec-dark hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-900/10 dark:hover:text-red-400 hover:border-red-200 dark:hover:border-red-800 transition-all cursor-pointer mt-4"
                     >
                         <span className="material-symbols-outlined text-[20px]">logout</span>
                         <span className="text-sm font-bold">Cerrar Sesión</span>

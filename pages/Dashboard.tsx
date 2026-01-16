@@ -236,12 +236,29 @@ const Dashboard: React.FC = () => {
             const apptDate = new Date(appt.date);
             const [hours, minutes] = appt.time.split(':').map(Number);
             apptDate.setHours(hours, minutes, 0, 0);
-            if (now > apptDate) {
-                return { label: 'Completado', color: 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400', icon: 'check_circle' };
+
+            // Calcular duración
+            let durationMinutes = 60;
+            const hMatch = appt.duration.match(/(\d+)h/);
+            const mMatch = appt.duration.match(/(\d+)m/);
+            if (hMatch) durationMinutes = parseInt(hMatch[1]) * 60;
+            if (mMatch) durationMinutes += parseInt(mMatch[1]);
+            else if (!hMatch && !mMatch) durationMinutes = 60;
+
+            const endTime = new Date(apptDate.getTime() + durationMinutes * 60000);
+
+            // EN SERVICIO
+            if (now >= apptDate && now < endTime && appt.status === 'confirmed') {
+                return { label: 'En Servicio', color: 'bg-indigo-100 text-indigo-700 dark:bg-indigo-900/30 dark:text-indigo-400', icon: 'timelapse' };
+            }
+
+            // FINALIZADO
+            if (now >= endTime) {
+                return { label: 'Finalizado', color: 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400', icon: 'check_circle' };
             }
         }
         if (appt.status === 'confirmed') {
-            return { label: 'Confirmado', color: 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400', icon: 'check_circle' };
+            return { label: 'Confirmado', color: 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400', icon: 'verified' };
         }
         return { label: 'Pendiente', color: 'bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400', icon: 'schedule' };
     };
@@ -264,7 +281,7 @@ const Dashboard: React.FC = () => {
     };
 
     // Crear Cita
-    const handleCreateAppointment = (e: React.FormEvent) => {
+    const handleCreateAppointment = async (e: React.FormEvent) => {
         e.preventDefault();
         setFormError(null);
 
@@ -299,9 +316,10 @@ const Dashboard: React.FC = () => {
         const selectedPro = professionals.find(p => p.id === Number(selectedProfessionalId));
 
         let finalClientName = clientName;
+        let finalClientId = existingClient?.id;
 
         if (!existingClient) {
-            addClient({
+            const newClient = await addClient({
                 id: Date.now(),
                 name: clientName,
                 email: clientEmail,
@@ -310,6 +328,7 @@ const Dashboard: React.FC = () => {
                 avatar: avatarUrl,
                 isNew: true
             });
+            if (newClient) finalClientId = newClient.id;
         } else {
             finalClientName = existingClient.name;
         }
@@ -328,6 +347,7 @@ const Dashboard: React.FC = () => {
             time: selectedTime,
             ampm: parseInt(selectedTime.split(':')[0]) >= 12 ? 'PM' : 'AM',
             client: finalClientName,
+            clientId: finalClientId, // Pass ID
             service: serviceString,
             duration: finalDurationString,
             price: finalPriceString,

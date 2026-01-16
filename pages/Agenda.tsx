@@ -8,12 +8,12 @@ type ViewMode = 'day' | 'week' | 'month';
 const Agenda: React.FC = () => {
     const navigate = useNavigate();
     const { appointments, clients, professionals, addAppointment, addClient, updateAppointmentStatus, deleteAppointment, userProfile } = useData();
-    
+
     // --- ESTADOS DE VISTA Y NAVEGACIÓN ---
     const [viewMode, setViewMode] = useState<ViewMode>('week');
     const [currentDate, setCurrentDate] = useState(new Date());
     const [currentTime, setCurrentTime] = useState(new Date());
-    
+
     // --- ESTADOS DE MODALES ---
     const [selectedAppointment, setSelectedAppointment] = useState<Appointment | null>(null); // Para ver detalles
     const [isModalOpen, setIsModalOpen] = useState(false); // Para crear nueva cita
@@ -27,7 +27,7 @@ const Agenda: React.FC = () => {
     const [selectedDate, setSelectedDate] = useState<Date | null>(null);
     const [selectedTime, setSelectedTime] = useState<string | null>(null);
     const [formError, setFormError] = useState<string | null>(null);
-    
+
     // NUEVO: Tipo de retiro
     const [removalType, setRemovalType] = useState<'' | 'semi' | 'acrylic' | 'feet'>('');
 
@@ -42,8 +42,18 @@ const Agenda: React.FC = () => {
         setFormError(null);
     }, [selectedDate, selectedProfessionalId, removalType, service]);
 
-     // Filtrar profesionales según el servicio seleccionado
-     const availableProfessionals = useMemo(() => {
+    // Lock Professional Selection if user is a Professional
+    useEffect(() => {
+        if (userProfile.role === 'professional' && userProfile.email) {
+            const myPro = professionals.find(p => p.email === userProfile.email);
+            if (myPro) {
+                setSelectedProfessionalId(myPro.id);
+            }
+        }
+    }, [userProfile, professionals]);
+
+    // Filtrar profesionales según el servicio seleccionado
+    const availableProfessionals = useMemo(() => {
         return professionals.filter(p => p.specialties.includes(service));
     }, [professionals, service]);
 
@@ -64,8 +74,8 @@ const Agenda: React.FC = () => {
 
     const isSameDay = (d1: Date, d2: Date) => {
         return d1.getDate() === d2.getDate() &&
-               d1.getMonth() === d2.getMonth() &&
-               d1.getFullYear() === d2.getFullYear();
+            d1.getMonth() === d2.getMonth() &&
+            d1.getFullYear() === d2.getFullYear();
     };
 
     // Helper de Estado (Igual que en Clients y Dashboard)
@@ -73,16 +83,34 @@ const Agenda: React.FC = () => {
         if (appt.status === 'cancelled') {
             return { label: 'Cancelado', color: 'bg-red-100 text-red-700', bg: 'bg-red-500' };
         }
+
         if (appt.date) {
             const now = new Date();
             const apptDate = new Date(appt.date);
             const [hours, minutes] = appt.time.split(':').map(Number);
             apptDate.setHours(hours, minutes, 0, 0);
 
-            if (now > apptDate) {
-                return { label: 'Completado', color: 'bg-blue-100 text-blue-700', bg: 'bg-blue-500' };
+            // Calcular duración en minutos
+            let durationMinutes = 60;
+            const hMatch = appt.duration.match(/(\d+)h/);
+            const mMatch = appt.duration.match(/(\d+)m/);
+            if (hMatch) durationMinutes = parseInt(hMatch[1]) * 60;
+            if (mMatch) durationMinutes += parseInt(mMatch[1]);
+            else if (!hMatch && !mMatch) durationMinutes = 60;
+
+            const endTime = new Date(apptDate.getTime() + durationMinutes * 60000);
+
+            // Estado EN PROCESO (En Servicio)
+            if (now >= apptDate && now < endTime && appt.status === 'confirmed') {
+                return { label: 'En Servicio', color: 'bg-purple-100 text-purple-700', bg: 'bg-purple-500' };
+            }
+
+            // Estado FINALIZADO
+            if (now >= endTime) {
+                return { label: 'Finalizado', color: 'bg-blue-100 text-blue-700', bg: 'bg-blue-500' };
             }
         }
+
         if (appt.status === 'confirmed') {
             return { label: 'Confirmado', color: 'bg-green-100 text-green-700', bg: 'bg-green-500' };
         }
@@ -153,7 +181,7 @@ const Agenda: React.FC = () => {
     // Calcular precio TOTAL (Base + Retiro específico)
     const currentTotalPrice = useMemo(() => {
         let price = getServiceBasePrice(service);
-        
+
         // Lógica de precios de retiro específicos
         if (removalType === 'semi') price += 10000;
         if (removalType === 'acrylic') price += 15000;
@@ -188,14 +216,14 @@ const Agenda: React.FC = () => {
         if (viewMode === 'day') {
             return [currentDate];
         }
-        
+
         if (viewMode === 'week') {
             const date = new Date(currentDate);
             const day = date.getDay(); // 0 (Domingo) - 6 (Sábado)
             // Ajustar para que la semana empiece el Lunes (1)
             const diff = date.getDate() - day + (day === 0 ? -6 : 1);
             const monday = new Date(date.setDate(diff));
-            
+
             const days = [];
             for (let i = 0; i < 7; i++) {
                 const d = new Date(monday);
@@ -209,7 +237,7 @@ const Agenda: React.FC = () => {
     }, [currentDate, viewMode]);
 
     // --- LÓGICA DE NUEVA CITA (Idéntica a Dashboard) ---
-    
+
     // Días disponibles para el selector del formulario
     const availableDays = useMemo(() => {
         const days = [];
@@ -217,10 +245,10 @@ const Agenda: React.FC = () => {
         for (let i = 0; i < 14; i++) {
             const d = new Date(today);
             d.setDate(today.getDate() + i);
-            
+
             // Obtener el nombre del día en Español (ej: "Lunes", "Martes")
             const dayName = d.toLocaleDateString('es-ES', { weekday: 'long' });
-            
+
             // Buscar configuración en schedule (case-insensitive)
             const scheduleDay = userProfile.schedule.find(s => s.day.toLowerCase() === dayName.toLowerCase());
 
@@ -259,8 +287,8 @@ const Agenda: React.FC = () => {
 
         const now = new Date();
         const isToday = selectedDate.getDate() === now.getDate() &&
-                        selectedDate.getMonth() === now.getMonth() &&
-                        selectedDate.getFullYear() === now.getFullYear();
+            selectedDate.getMonth() === now.getMonth() &&
+            selectedDate.getFullYear() === now.getFullYear();
 
         if (isToday) {
             const currentHourNow = now.getHours();
@@ -297,10 +325,10 @@ const Agenda: React.FC = () => {
 
     const isSlotOccupied = (timeToCheck: string) => {
         if (!selectedProfessionalId || !selectedDate) return false;
-        
+
         const targetDate = normalizeDate(selectedDate);
         const targetProId = Number(selectedProfessionalId);
-        
+
         const [checkH, checkM] = timeToCheck.split(':').map(Number);
         const newStart = checkH * 60 + checkM;
         const newEnd = newStart + currentDurationMinutes;
@@ -314,7 +342,7 @@ const Agenda: React.FC = () => {
 
             const [existH, existM] = appt.time.split(':').map(Number);
             const existStart = existH * 60 + existM;
-            
+
             // Estimación segura de duración existente
             let existDuration = 60;
             const hMatch = appt.duration.match(/(\d+)h/);
@@ -338,11 +366,11 @@ const Agenda: React.FC = () => {
         }
     }, [existingClient]);
 
-    const handleCreateAppointment = (e: React.FormEvent) => {
+    const handleCreateAppointment = async (e: React.FormEvent) => {
         e.preventDefault();
         setFormError(null);
 
-        if(!selectedDate || !selectedTime || !clientName || !clientEmail || clientPhone.length !== 10 || !selectedProfessionalId) return;
+        if (!selectedDate || !selectedTime || !clientName || !clientEmail || clientPhone.length !== 10 || !selectedProfessionalId) return;
 
         // Validación Final de Conflicto (Doble chequeo)
         if (isSlotOccupied(selectedTime)) {
@@ -361,19 +389,21 @@ const Agenda: React.FC = () => {
         } else {
             const emailOwner = clients.find(c => c.email.toLowerCase() === clientEmail.toLowerCase());
             if (emailOwner && emailOwner.id !== existingClient.id) {
-                 setFormError(`El correo ingresado pertenece a otro cliente (${emailOwner.name}). Por favor verifique.`);
-                 return;
+                setFormError(`El correo ingresado pertenece a otro cliente (${emailOwner.name}). Por favor verifique.`);
+                return;
             }
         }
         // ----------------------------------------
 
         const avatarUrl = existingClient ? existingClient.avatar : `https://ui-avatars.com/api/?name=${encodeURIComponent(clientName)}&background=random`;
         const selectedPro = professionals.find(p => p.id === Number(selectedProfessionalId));
-        
+
         // 1. Verificar/Crear Cliente
         let finalClientName = clientName;
+        let finalClientId = existingClient?.id;
+
         if (!existingClient) {
-            addClient({
+            const newClient = await addClient({
                 id: Date.now(),
                 name: clientName,
                 email: clientEmail,
@@ -382,8 +412,9 @@ const Agenda: React.FC = () => {
                 avatar: avatarUrl,
                 isNew: true
             });
+            if (newClient) finalClientId = newClient.id;
         } else {
-             finalClientName = existingClient.name;
+            finalClientName = existingClient.name;
         }
 
         const finalDurationString = formatDuration(currentDurationMinutes);
@@ -401,6 +432,7 @@ const Agenda: React.FC = () => {
             time: selectedTime,
             ampm: parseInt(selectedTime.split(':')[0]) >= 12 ? 'PM' : 'AM',
             client: finalClientName,
+            clientId: finalClientId,
             service: serviceString,
             duration: finalDurationString,
             price: finalPriceString, // GUARDAR PRECIO
@@ -422,7 +454,7 @@ const Agenda: React.FC = () => {
             `Duración total: ${finalDurationString}\n\n` +
             `La cita ha quedado en estado PENDIENTE. Podrás confirmarla desde el panel principal.`
         );
-        
+
         // Reset
         setIsModalOpen(false);
         setClientName(''); setClientPhone(''); setClientEmail('');
@@ -444,11 +476,11 @@ const Agenda: React.FC = () => {
             let total = 0;
             const h = dur.match(/(\d+)\s*h/);
             const m = dur.match(/(\d+)\s*m/);
-            if(h) total += parseInt(h[1]) * 60;
-            if(m) total += parseInt(m[1]);
+            if (h) total += parseInt(h[1]) * 60;
+            if (m) total += parseInt(m[1]);
             // Si no matchea nada pero hay solo numero, asumir minutos (ej "45m")
             if (!h && !m && dur.includes('m')) {
-                total += parseInt(dur.replace('m',''));
+                total += parseInt(dur.replace('m', ''));
             }
             return total || 60;
         };
@@ -467,7 +499,7 @@ const Agenda: React.FC = () => {
                 <div className="w-16 md:w-20 shrink-0 border-r border-slate-100 dark:border-slate-800 bg-white dark:bg-[#15232d] pt-14 z-20 sticky left-0">
                     <div className="relative h-[1300px]">
                         {[...Array(13)].map((_, i) => (
-                            <div key={i} className="h-[100px] text-right pr-3 text-xs text-slate-400 font-medium -mt-2.5">{`${i+8}:00`}</div>
+                            <div key={i} className="h-[100px] text-right pr-3 text-xs text-slate-400 font-medium -mt-2.5">{`${i + 8}:00`}</div>
                         ))}
                     </div>
                 </div>
@@ -495,7 +527,7 @@ const Agenda: React.FC = () => {
                     <div className="relative flex flex-1 h-[1300px]">
                         {/* Líneas de fondo */}
                         <div className="absolute inset-0 flex flex-col pointer-events-none">
-                            {[...Array(13)].map((_,i) => <div key={i} className="flex-1 border-b border-slate-100 dark:border-slate-800/50 border-dashed"></div>)}
+                            {[...Array(13)].map((_, i) => <div key={i} className="flex-1 border-b border-slate-100 dark:border-slate-800/50 border-dashed"></div>)}
                         </div>
                         {/* Columnas */}
                         <div className="absolute inset-0 flex pointer-events-none">
@@ -506,10 +538,10 @@ const Agenda: React.FC = () => {
 
                         {/* Línea de Hora Actual */}
                         {timePos > 0 && calendarDays.some(d => isSameDay(d, new Date())) && (
-                            <div className="absolute w-full flex items-center z-10 pointer-events-none" style={{top: `${timePos}px`}}>
+                            <div className="absolute w-full flex items-center z-10 pointer-events-none" style={{ top: `${timePos}px` }}>
                                 <div className="w-full border-t-2 border-red-500 shadow-sm opacity-50"></div>
                                 <div className="absolute -left-1.5 bg-red-500 text-[10px] text-white px-1 rounded">
-                                    {currentTime.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
+                                    {currentTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                                 </div>
                             </div>
                         )}
@@ -517,62 +549,94 @@ const Agenda: React.FC = () => {
                         {/* Citas con Algoritmo de Colisión */}
                         {calendarDays.map((day, colIndex) => {
                             const dayAppts = appointments.filter(a => a.date && isSameDay(new Date(a.date), day));
-                            
-                            // Preparar datos para cálculo
-                            const positionedAppts = dayAppts.map(appt => {
+
+                            // --- ALGORITMO DE LAYOUT DE EVENTOS ---
+                            // 1. Encontrar grupos de eventos que colisionan (Connected Components)
+                            // 2. Asignar columnas dentro de cada grupo para evitar superposiciones
+
+                            // Preparar eventos con geometría base
+                            let items = dayAppts.map(appt => {
                                 const startMin = getMinutesFromTime(appt.time);
                                 const durationMin = getDurationInMinutes(appt.duration);
                                 return {
                                     ...appt,
                                     _start: startMin,
                                     _end: startMin + durationMin,
-                                    _duration: durationMin
+                                    _duration: durationMin,
+                                    _colIndex: 0, // Columna asignada
+                                    _totalCols: 1 // Total de columnas en su grupo
                                 };
+                            }).sort((a, b) => a._start - b._start || b._duration - a._duration); // Ordenar por inicio, luego duración
+
+                            // Resolver colisiones
+                            const columns: typeof items[] = [];
+                            let lastEventEnding: number | null = null;
+
+                            items.forEach(ev => {
+                                // Buscar primera columna donde quepa el evento
+                                let placed = false;
+                                for (let i = 0; i < columns.length; i++) {
+                                    const col = columns[i];
+                                    const lastInCol = col[col.length - 1];
+                                    if (lastInCol._end <= ev._start) {
+                                        col.push(ev);
+                                        ev._colIndex = i;
+                                        placed = true;
+                                        break;
+                                    }
+                                }
+                                if (!placed) {
+                                    columns.push([ev]);
+                                    ev._colIndex = columns.length - 1;
+                                }
                             });
 
+                            // Calcular ancho total basado en el número máximo de columnas en un "cluster"
+                            // Un cluster es un conjunto de eventos que se solapan temporalmente
+                            // Para simplificar: tomaremos el ancho de las columnas totales activas en ese momento
+                            // Una heurística mejor: Expandir el ancho si no hay vecinos a la derecha
+                            const totalColumns = columns.length;
+
                             return (
-                                <div key={colIndex} className="absolute top-0 bottom-0" style={{left: `${colIndex * (100 / calendarDays.length)}%`, width: `${100 / calendarDays.length}%`}}>
-                                    {positionedAppts.map(appt => {
+                                <div key={colIndex} className="absolute top-0 bottom-0" style={{ left: `${colIndex * (100 / calendarDays.length)}%`, width: `${100 / calendarDays.length}%` }}>
+                                    {items.map(appt => {
                                         const status = getAppointmentStatus(appt);
-                                        
-                                        // Algoritmo simple de colisión: Compartir ancho con citas superpuestas
-                                        const overlaps = positionedAppts.filter(other => 
-                                            (appt._start < other._end && appt._end > other._start)
-                                        ).sort((a, b) => a.id - b.id); // Ordenar por ID para consistencia
-                                        
-                                        const index = overlaps.findIndex(x => x.id === appt.id);
-                                        const count = overlaps.length;
-                                        
-                                        // Estilos dinámicos
-                                        const widthPercent = 100 / count;
-                                        const leftPercent = index * widthPercent;
-                                        const topPx = ((appt._start / 60) - 8) * 100; // Asumiendo inicio 8am, 100px por hora
+
+                                        // Calcular ancho y posición
+                                        // Estrategia simple: width = 100 / totalColumns
+                                        // left = colIndex * width
+
+                                        // Ajuste para móviles: si hay muchas columnas, scroll o minimo ancho?
+                                        // Por ahora mantenemos porcentual
+
+                                        const widthPercent = 100 / (totalColumns || 1);
+                                        const leftPercent = appt._colIndex * widthPercent;
+                                        const topPx = ((appt._start / 60) - 8) * 100;
                                         const heightPx = (appt._duration / 60) * 100;
 
                                         return (
-                                            <div 
+                                            <div
                                                 key={appt.id}
                                                 onClick={() => setSelectedAppointment(appt)}
                                                 className="absolute px-0.5 py-0 z-10 transition-all hover:scale-[1.02] hover:z-20 cursor-pointer"
-                                                style={{ 
-                                                    top: `${topPx}px`, 
+                                                style={{
+                                                    top: `${topPx}px`,
                                                     height: `${heightPx}px`,
                                                     width: `${widthPercent}%`,
                                                     left: `${leftPercent}%`
                                                 }}
                                             >
-                                                <div className={`h-full border-l-4 rounded-md p-1.5 shadow-sm flex flex-col justify-between overflow-hidden text-xs leading-tight ${
-                                                    status.color.includes('blue') 
+                                                <div className={`h-full border-l-4 rounded-md p-1.5 shadow-sm flex flex-col justify-between overflow-hidden text-xs leading-tight ${status.color.includes('blue')
                                                     ? 'bg-blue-100 dark:bg-blue-900/40 border-blue-500'
-                                                    : appt.professionalId && appt.professionalId % 2 === 0 
-                                                        ? 'bg-purple-100 hover:bg-purple-200 dark:bg-purple-900/40 border-purple-500' 
+                                                    : appt.professionalId && appt.professionalId % 2 === 0
+                                                        ? 'bg-purple-100 hover:bg-purple-200 dark:bg-purple-900/40 border-purple-500'
                                                         : 'bg-primary/10 hover:bg-primary/20 border-primary'
-                                                }`}>
+                                                    }`}>
                                                     <div className="overflow-hidden">
                                                         <h4 className="font-bold text-slate-900 dark:text-white truncate text-[11px]">{appt.service}</h4>
                                                         <p className="text-slate-600 dark:text-slate-300 truncate text-[10px]">{appt.client}</p>
-                                                        {appt.professionalName && count < 2 && (
-                                                             <p className="text-primary text-[9px] mt-0.5 truncate">{appt.professionalName}</p>
+                                                        {appt.professionalName && (
+                                                            <p className="text-primary text-[9px] mt-0.5 truncate">{appt.professionalName}</p>
                                                         )}
                                                     </div>
                                                     <span className="text-[9px] text-slate-500 font-medium block">{appt.time}</span>
@@ -594,7 +658,7 @@ const Agenda: React.FC = () => {
         const month = currentDate.getMonth();
         const firstDayOfMonth = new Date(year, month, 1);
         const daysInMonth = new Date(year, month + 1, 0).getDate();
-        
+
         let startDay = firstDayOfMonth.getDay() - 1;
         if (startDay === -1) startDay = 6;
 
@@ -612,7 +676,7 @@ const Agenda: React.FC = () => {
                 <div className="grid grid-cols-7 auto-rows-[minmax(120px,1fr)] gap-2">
                     {days.map((day, idx) => {
                         if (!day) return <div key={idx} className="bg-slate-50/50 dark:bg-slate-800/20 rounded-lg"></div>;
-                        
+
                         const isToday = isSameDay(day, new Date());
                         const dayAppts = appointments.filter(a => a.date && isSameDay(new Date(a.date), day));
 
@@ -626,7 +690,7 @@ const Agenda: React.FC = () => {
                                 </div>
                                 <div className="flex-1 flex flex-col gap-1 overflow-y-auto scrollbar-hide mt-1">
                                     {dayAppts.slice(0, 3).map(appt => (
-                                        <button 
+                                        <button
                                             key={appt.id}
                                             onClick={() => setSelectedAppointment(appt)}
                                             className="text-left text-[10px] px-2 py-1 rounded bg-primary/10 hover:bg-primary/20 text-primary truncate border-l-2 border-primary"
@@ -663,22 +727,21 @@ const Agenda: React.FC = () => {
                             {currentDate.toLocaleDateString('es-ES', { month: 'long', year: 'numeric' })}
                         </h2>
                         <span className="text-sm text-slate-500 dark:text-slate-400 capitalize">
-                            {viewMode === 'day' ? currentDate.toLocaleDateString('es-ES', {weekday: 'long', day: 'numeric'}) : 
-                             viewMode === 'month' ? 'Vista Mensual' : 
-                             `Semana del ${calendarDays[0]?.getDate()} al ${calendarDays[6]?.getDate()}`}
+                            {viewMode === 'day' ? currentDate.toLocaleDateString('es-ES', { weekday: 'long', day: 'numeric' }) :
+                                viewMode === 'month' ? 'Vista Mensual' :
+                                    `Semana del ${calendarDays[0]?.getDate()} al ${calendarDays[6]?.getDate()}`}
                         </span>
                     </div>
                 </div>
                 <div className="flex flex-wrap items-center gap-3 justify-end">
                     {/* Botón dinámico de Google Calendar */}
-                    <button 
+                    <button
                         onClick={() => navigate('/settings')}
                         title={userProfile.isGoogleCalendarConnected ? "Sincronizado correctamente. Clic para configurar." : "No sincronizado. Clic para conectar."}
-                        className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full border transition-all ${
-                            userProfile.isGoogleCalendarConnected 
-                            ? 'bg-green-50 text-green-700 border-green-100 dark:bg-green-900/20 dark:text-green-400 dark:border-green-900/30 hover:bg-green-100 dark:hover:bg-green-900/40' 
+                        className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full border transition-all ${userProfile.isGoogleCalendarConnected
+                            ? 'bg-green-50 text-green-700 border-green-100 dark:bg-green-900/20 dark:text-green-400 dark:border-green-900/30 hover:bg-green-100 dark:hover:bg-green-900/40'
                             : 'bg-gray-50 text-gray-500 border-gray-200 dark:bg-gray-800 dark:text-gray-400 dark:border-gray-700 hover:bg-gray-100 dark:hover:bg-gray-700'
-                        }`}
+                            }`}
                     >
                         <span className="material-symbols-outlined text-[18px]">
                             {userProfile.isGoogleCalendarConnected ? 'sync' : 'sync_disabled'}
@@ -694,7 +757,7 @@ const Agenda: React.FC = () => {
                         <button onClick={() => setViewMode('week')} className={`px-4 py-1.5 rounded-full text-sm font-medium transition-all ${viewMode === 'week' ? 'bg-white dark:bg-slate-700 text-primary shadow-sm' : 'text-slate-500 dark:text-slate-400 hover:bg-white/50'}`}>Semana</button>
                         <button onClick={() => setViewMode('month')} className={`px-4 py-1.5 rounded-full text-sm font-medium transition-all ${viewMode === 'month' ? 'bg-white dark:bg-slate-700 text-primary shadow-sm' : 'text-slate-500 dark:text-slate-400 hover:bg-white/50'}`}>Mes</button>
                     </div>
-                    <button 
+                    <button
                         onClick={() => setIsModalOpen(true)}
                         className="flex items-center gap-2 bg-primary hover:bg-blue-600 text-white px-5 py-2.5 rounded-full font-bold shadow-lg shadow-primary/30 transition-all active:scale-95"
                     >
@@ -703,7 +766,7 @@ const Agenda: React.FC = () => {
                     </button>
                 </div>
             </div>
-            
+
             {/* View Render */}
             {viewMode === 'month' ? renderMonthGrid() : renderTimeGrid()}
 
@@ -715,10 +778,10 @@ const Agenda: React.FC = () => {
                             <button onClick={() => setSelectedAppointment(null)} className="absolute top-4 right-4 bg-black/20 hover:bg-black/40 text-white rounded-full p-1 transition-colors"><span className="material-symbols-outlined text-lg">close</span></button>
                         </div>
                         <div className="px-6 pb-6 relative">
-                            <div className="size-20 rounded-full border-4 border-white dark:border-card-dark bg-cover bg-center -mt-10 mb-4 bg-gray-200" style={{backgroundImage: `url("${selectedAppointment.avatar}")`}}></div>
+                            <div className="size-20 rounded-full border-4 border-white dark:border-card-dark bg-cover bg-center -mt-10 mb-4 bg-gray-200" style={{ backgroundImage: `url("${selectedAppointment.avatar}")` }}></div>
                             <h3 className="text-xl font-bold text-slate-900 dark:text-white">{selectedAppointment.client}</h3>
                             <p className="text-slate-500 dark:text-slate-400 text-sm mb-6">{selectedAppointment.service}</p>
-                            
+
                             <div className="bg-slate-50 dark:bg-slate-800/50 rounded-xl p-4 border border-slate-100 dark:border-slate-800 mb-6">
                                 <div className="flex justify-between items-center border-b border-slate-200 dark:border-slate-700 pb-3 mb-3">
                                     <span className="text-xs text-slate-500 uppercase font-bold">Fecha</span>
@@ -728,7 +791,7 @@ const Agenda: React.FC = () => {
                                     <span className="text-xs text-slate-500 uppercase font-bold">Horario</span>
                                     <span className="text-sm font-medium dark:text-gray-200">{selectedAppointment.time}</span>
                                 </div>
-                                 <div className="flex justify-between items-center border-b border-slate-200 dark:border-slate-700 pb-3 mb-3">
+                                <div className="flex justify-between items-center border-b border-slate-200 dark:border-slate-700 pb-3 mb-3">
                                     <span className="text-xs text-slate-500 uppercase font-bold">Profesional</span>
                                     <span className="text-sm font-medium dark:text-gray-200">{selectedAppointment.professionalName || 'No asignado'}</span>
                                 </div>
@@ -750,7 +813,7 @@ const Agenda: React.FC = () => {
                                     })()}
                                 </div>
                             </div>
-                            
+
                             {/* Botones de Acción (Solo si no está completado/cancelado) */}
                             {(() => {
                                 const status = getAppointmentStatus(selectedAppointment);
@@ -766,7 +829,7 @@ const Agenda: React.FC = () => {
                                 }
                                 return null;
                             })()}
-                            
+
                             {(() => {
                                 const client = getClientInfo(selectedAppointment.client);
                                 return client && (
@@ -790,14 +853,14 @@ const Agenda: React.FC = () => {
                                 <span className="material-symbols-outlined">add_circle</span>
                                 <h3 className="font-bold text-lg">Nueva Cita</h3>
                             </div>
-                            <button 
-                                onClick={() => setIsModalOpen(false)} 
+                            <button
+                                onClick={() => setIsModalOpen(false)}
                                 className="hover:bg-white/20 rounded-full p-1 transition-colors"
                             >
                                 <span className="material-symbols-outlined">close</span>
                             </button>
                         </div>
-                        
+
                         <form onSubmit={handleCreateAppointment} className="flex-1 overflow-y-auto p-6 flex flex-col gap-5 scrollbar-hide">
                             <div className="bg-blue-50 dark:bg-blue-900/20 p-4 rounded-xl flex items-start gap-3 border border-blue-100 dark:border-blue-900/30">
                                 <span className="material-symbols-outlined text-blue-500 mt-0.5">info</span>
@@ -823,14 +886,14 @@ const Agenda: React.FC = () => {
                                     <label className="text-sm font-bold text-text-main-light dark:text-text-main-dark">Celular </label>
                                     <div className="relative">
                                         <span className="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-text-sec-light">smartphone</span>
-                                        <input 
+                                        <input
                                             required
                                             type="tel"
                                             pattern="[0-9]{10}"
                                             maxLength={10}
                                             value={clientPhone}
                                             onChange={handlePhoneChange}
-                                            placeholder="Ej: 5512345678" 
+                                            placeholder="Ej: 5512345678"
                                             className="w-full rounded-xl border border-border-light dark:border-border-dark bg-background-light dark:bg-background-dark pl-10 pr-4 h-12 text-sm focus:border-primary focus:ring-1 focus:ring-primary dark:text-white outline-none transition-all"
                                         />
                                     </div>
@@ -845,12 +908,12 @@ const Agenda: React.FC = () => {
                                     <label className="text-sm font-bold text-text-main-light dark:text-text-main-dark">Correo Electrónico</label>
                                     <div className="relative">
                                         <span className="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-text-sec-light">mail</span>
-                                        <input 
+                                        <input
                                             required
-                                            type="email" 
+                                            type="email"
                                             value={clientEmail}
                                             onChange={(e) => setClientEmail(e.target.value)}
-                                            placeholder="cliente@ejemplo.com" 
+                                            placeholder="cliente@ejemplo.com"
                                             className="w-full rounded-xl border border-border-light dark:border-border-dark bg-background-light dark:bg-background-dark pl-10 pr-4 h-12 text-sm focus:border-primary focus:ring-1 focus:ring-primary dark:text-white outline-none transition-all"
                                         />
                                     </div>
@@ -862,12 +925,12 @@ const Agenda: React.FC = () => {
                                 <label className="text-sm font-bold text-text-main-light dark:text-text-main-dark">Nombre del Cliente</label>
                                 <div className="relative">
                                     <span className="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-text-sec-light">person</span>
-                                    <input 
+                                    <input
                                         required
-                                        type="text" 
+                                        type="text"
                                         value={clientName}
                                         onChange={(e) => setClientName(e.target.value)}
-                                        placeholder="Nombre completo" 
+                                        placeholder="Nombre completo"
                                         className="w-full rounded-xl border border-border-light dark:border-border-dark bg-background-light dark:bg-background-dark pl-10 pr-4 h-12 text-sm focus:border-primary focus:ring-1 focus:ring-primary dark:text-white outline-none transition-all"
                                         readOnly={!!existingClient} // Bloquear si existe
                                     />
@@ -889,7 +952,7 @@ const Agenda: React.FC = () => {
                                     <label className="text-sm font-bold text-text-main-light dark:text-text-main-dark">Servicio</label>
                                     <div className="relative">
                                         <span className="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-text-sec-light">spa</span>
-                                        <select 
+                                        <select
                                             value={service}
                                             onChange={(e) => setService(e.target.value)}
                                             className="w-full rounded-xl border border-border-light dark:border-border-dark bg-background-light dark:bg-background-dark pl-10 pr-4 h-12 text-sm focus:border-primary focus:ring-1 focus:ring-primary dark:text-white outline-none transition-all appearance-none truncate"
@@ -931,44 +994,40 @@ const Agenda: React.FC = () => {
                                                 <button
                                                     type="button"
                                                     onClick={() => setRemovalType('')}
-                                                    className={`px-2 py-2 text-xs rounded-lg font-bold border transition-all ${
-                                                        removalType === '' 
-                                                        ? 'bg-gray-200 dark:bg-gray-700 text-gray-800 dark:text-white border-gray-300 dark:border-gray-600' 
+                                                    className={`px-2 py-2 text-xs rounded-lg font-bold border transition-all ${removalType === ''
+                                                        ? 'bg-gray-200 dark:bg-gray-700 text-gray-800 dark:text-white border-gray-300 dark:border-gray-600'
                                                         : 'bg-white dark:bg-background-dark text-gray-500 border-transparent hover:border-gray-200'
-                                                    }`}
+                                                        }`}
                                                 >
                                                     No
                                                 </button>
                                                 <button
                                                     type="button"
                                                     onClick={() => setRemovalType('semi')}
-                                                    className={`px-2 py-2 text-xs rounded-lg font-bold border transition-all truncate ${
-                                                        removalType === 'semi' 
-                                                        ? 'bg-primary text-white border-primary shadow-sm' 
+                                                    className={`px-2 py-2 text-xs rounded-lg font-bold border transition-all truncate ${removalType === 'semi'
+                                                        ? 'bg-primary text-white border-primary shadow-sm'
                                                         : 'bg-white dark:bg-background-dark text-gray-600 dark:text-gray-400 border-gray-200 dark:border-gray-700 hover:border-primary/50'
-                                                    }`}
+                                                        }`}
                                                 >
                                                     Semi/Press (+$10k)
                                                 </button>
                                                 <button
                                                     type="button"
                                                     onClick={() => setRemovalType('acrylic')}
-                                                    className={`px-2 py-2 text-xs rounded-lg font-bold border transition-all truncate ${
-                                                        removalType === 'acrylic' 
-                                                        ? 'bg-purple-500 text-white border-purple-500 shadow-sm' 
+                                                    className={`px-2 py-2 text-xs rounded-lg font-bold border transition-all truncate ${removalType === 'acrylic'
+                                                        ? 'bg-purple-500 text-white border-purple-500 shadow-sm'
                                                         : 'bg-white dark:bg-background-dark text-gray-600 dark:text-gray-400 border-gray-200 dark:border-gray-700 hover:border-purple-500/50'
-                                                    }`}
+                                                        }`}
                                                 >
                                                     Acrílico (+$15k)
                                                 </button>
                                                 <button
                                                     type="button"
                                                     onClick={() => setRemovalType('feet')}
-                                                    className={`px-2 py-2 text-xs rounded-lg font-bold border transition-all truncate ${
-                                                        removalType === 'feet' 
-                                                        ? 'bg-teal-500 text-white border-teal-500 shadow-sm' 
+                                                    className={`px-2 py-2 text-xs rounded-lg font-bold border transition-all truncate ${removalType === 'feet'
+                                                        ? 'bg-teal-500 text-white border-teal-500 shadow-sm'
                                                         : 'bg-white dark:bg-background-dark text-gray-600 dark:text-gray-400 border-gray-200 dark:border-gray-700 hover:border-teal-500/50'
-                                                    }`}
+                                                        }`}
                                                 >
                                                     Pies (+$8k)
                                                 </button>
@@ -981,11 +1040,12 @@ const Agenda: React.FC = () => {
                                     <label className="text-sm font-bold text-text-main-light dark:text-text-main-dark">Profesional</label>
                                     <div className="relative">
                                         <span className="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-text-sec-light">badge</span>
-                                        <select 
+                                        <select
                                             value={selectedProfessionalId}
                                             onChange={(e) => setSelectedProfessionalId(Number(e.target.value))}
                                             required
-                                            className="w-full rounded-xl border border-border-light dark:border-border-dark bg-background-light dark:bg-background-dark pl-10 pr-4 h-12 text-sm focus:border-primary focus:ring-1 focus:ring-primary dark:text-white outline-none transition-all appearance-none"
+                                            disabled={userProfile.role === 'professional'}
+                                            className="w-full rounded-xl border border-border-light dark:border-border-dark bg-background-light dark:bg-background-dark pl-10 pr-4 h-12 text-sm focus:border-primary focus:ring-1 focus:ring-primary dark:text-white outline-none transition-all appearance-none disabled:opacity-50 disabled:cursor-not-allowed"
                                         >
                                             <option value="" disabled>Seleccionar...</option>
                                             {availableProfessionals.map(pro => (
@@ -1012,11 +1072,10 @@ const Agenda: React.FC = () => {
                                                 type="button"
                                                 key={idx}
                                                 onClick={() => setSelectedDate(date)}
-                                                className={`snap-start shrink-0 flex flex-col items-center justify-center w-16 h-20 rounded-xl border transition-all duration-200 ${
-                                                    isDateSelected(date)
-                                                    ? 'bg-primary border-primary text-white shadow-lg shadow-primary/30 scale-105' 
+                                                className={`snap-start shrink-0 flex flex-col items-center justify-center w-16 h-20 rounded-xl border transition-all duration-200 ${isDateSelected(date)
+                                                    ? 'bg-primary border-primary text-white shadow-lg shadow-primary/30 scale-105'
                                                     : 'bg-white dark:bg-card-dark border-border-light dark:border-border-dark hover:border-primary text-text-sec-light dark:text-text-sec-dark hover:bg-primary/5'
-                                                }`}
+                                                    }`}
                                             >
                                                 <span className="text-xs font-medium uppercase">{date.toLocaleDateString('es-ES', { weekday: 'short' })}</span>
                                                 <span className="text-xl font-black mt-1">{date.getDate()}</span>
@@ -1040,7 +1099,7 @@ const Agenda: React.FC = () => {
                                         {/* Display Estimated Duration */}
                                         <span className="text-xs font-bold bg-blue-100 text-blue-700 px-2 py-0.5 rounded ml-2">Duración: {formatDuration(currentDurationMinutes)}</span>
                                     </label>
-                                    
+
                                     {/* Leyenda de Disponibilidad */}
                                     <div className="flex gap-3 text-[10px] text-text-sec-light dark:text-text-sec-dark">
                                         <div className="flex items-center gap-1"><span className="size-2 rounded-full bg-white border border-gray-300"></span>Libre</div>
@@ -1048,7 +1107,7 @@ const Agenda: React.FC = () => {
                                         <div className="flex items-center gap-1"><span className="size-2 rounded-full bg-gray-100 dark:bg-gray-700 border border-gray-200"></span>Ocupado</div>
                                     </div>
                                 </div>
-                                
+
                                 <div className="grid grid-cols-4 gap-2">
                                     {timeSlots.length > 0 ? (
                                         timeSlots.map((time) => {
@@ -1061,13 +1120,12 @@ const Agenda: React.FC = () => {
                                                     onClick={() => {
                                                         if (!isOccupied) setSelectedTime(time);
                                                     }}
-                                                    className={`py-2 rounded-lg text-sm font-bold border transition-all relative overflow-hidden ${
-                                                        selectedTime === time
+                                                    className={`py-2 rounded-lg text-sm font-bold border transition-all relative overflow-hidden ${selectedTime === time
                                                         ? 'bg-primary border-primary text-white shadow-md z-10'
-                                                        : isOccupied 
+                                                        : isOccupied
                                                             ? 'bg-gray-100 dark:bg-gray-800 border-gray-200 dark:border-gray-700 text-gray-400 dark:text-gray-600 cursor-not-allowed'
                                                             : 'bg-white dark:bg-card-dark border-border-light dark:border-border-dark text-text-main-light dark:text-text-main-dark hover:bg-primary/10 hover:border-primary'
-                                                    }`}
+                                                        }`}
                                                 >
                                                     {time}
                                                     {isOccupied && <span className="absolute inset-0 flex items-center justify-center bg-gray-200/50 dark:bg-black/50"><span className="material-symbols-outlined text-xs">block</span></span>}
@@ -1085,15 +1143,15 @@ const Agenda: React.FC = () => {
                             </div>
 
                             <div className="flex gap-3 mt-4 pt-4 border-t border-border-light dark:border-border-dark">
-                                <button 
-                                    type="button" 
+                                <button
+                                    type="button"
                                     onClick={() => setIsModalOpen(false)}
                                     className="flex-1 py-3 rounded-xl font-bold text-text-sec-light dark:text-text-sec-dark hover:bg-background-light dark:hover:bg-background-dark transition-colors"
                                 >
                                     Cancelar
                                 </button>
-                                <button 
-                                    type="submit" 
+                                <button
+                                    type="submit"
                                     disabled={!selectedDate || !selectedTime || !clientName || !clientEmail || clientPhone.length < 10 || !selectedProfessionalId}
                                     className="flex-1 py-3 rounded-xl bg-primary text-white font-bold hover:bg-primary/90 transition-colors shadow-lg shadow-primary/20 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
                                 >

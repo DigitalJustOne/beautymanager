@@ -2,54 +2,74 @@
 import React, { useState } from 'react';
 import { supabase } from '../services/supabase';
 import { useNavigate } from 'react-router-dom';
+import { useAuth } from '../context/AuthContext';
 
 const Login: React.FC = () => {
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
     const [isRegistering, setIsRegistering] = useState(false);
-    const [loading, setLoading] = useState(false);
-    const [error, setError] = useState<string | null>(null);
+    const [formLoading, setFormLoading] = useState(false);
+    const [formError, setFormError] = useState<string | null>(null);
+    const { session, role, loading: authLoading } = useAuth();
     const navigate = useNavigate();
+
+    // Only disable the button when the form is actually submitting
+    // NOT during initial auth check - that's shown with a separate loading screen
+    const isButtonDisabled = formLoading;
+
+    // Show loading screen if auth is still checking the initial session
+    const isInitialAuthCheck = authLoading && !formLoading;
+
+    // Only redirect if we have a session AND a role already (e.g., coming back to page)
+    React.useEffect(() => {
+        if (session && role) {
+            console.log("Login: Redirecting role", role);
+            if (role === 'admin') navigate('/');
+            else if (role === 'professional') navigate('/professional');
+            else navigate('/client');
+        }
+    }, [session, role, navigate]);
 
     const handleAuth = async (e: React.FormEvent) => {
         e.preventDefault();
-        setLoading(true);
-        setError(null);
+        setFormLoading(true);
+        setFormError(null);
 
         try {
             if (isRegistering) {
-                const { error } = await supabase.auth.signUp({
-                    email, // Must match what supabase expects
-                    password,
-                });
-                if (error) throw error;
-                alert('Revisa tu email para confirmar tu cuenta!');
-            } else {
-                const { error } = await supabase.auth.signInWithPassword({
+                const { error: signUpError } = await supabase.auth.signUp({
                     email,
                     password,
                 });
-                if (error) throw error;
-
-                // Fetch profile to check role
-                const { data: { user } } = await supabase.auth.getUser();
-                if (user) {
-                    const { data: profile } = await supabase.from('profiles').select('role').eq('id', user.id).single();
-                    const role = profile?.role || 'client';
-
-                    if (role === 'admin') navigate('/');
-                    else if (role === 'professional') navigate('/professional');
-                    else navigate('/client');
-                } else {
-                    navigate('/');
-                }
+                if (signUpError) throw signUpError;
+                alert('¡Revisa tu email para confirmar tu cuenta!');
+            } else {
+                const { error: signInError } = await supabase.auth.signInWithPassword({
+                    email,
+                    password,
+                });
+                if (signInError) throw signInError;
+                // Redirection is handled by the useEffect above
             }
         } catch (err: any) {
-            setError(err.message || 'Error de autenticación');
+            console.error("Auth error:", err);
+            setFormError(err.message || 'Error de autenticación');
         } finally {
-            setLoading(false);
+            setFormLoading(false);
         }
     };
+
+    // Show a loading spinner if we're checking auth initially
+    if (isInitialAuthCheck) {
+        return (
+            <div className="flex h-screen items-center justify-center bg-background-light dark:bg-background-dark">
+                <div className="flex flex-col items-center gap-4">
+                    <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary"></div>
+                    <p className="text-text-sec-light dark:text-text-sec-dark">Verificando sesión...</p>
+                </div>
+            </div>
+        );
+    }
 
     return (
         <div className="flex h-screen items-center justify-center bg-background-light dark:bg-background-dark">
@@ -64,9 +84,9 @@ const Login: React.FC = () => {
                     BeautyManager Pro
                 </p>
 
-                {error && (
+                {formError && (
                     <div className="mb-4 p-3 bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400 rounded-lg text-sm border border-red-200 dark:border-red-800">
-                        {error}
+                        {formError}
                     </div>
                 )}
 
@@ -98,10 +118,10 @@ const Login: React.FC = () => {
 
                     <button
                         type="submit"
-                        disabled={loading}
+                        disabled={isButtonDisabled}
                         className="w-full py-3 px-4 bg-primary text-white font-bold rounded-xl hover:opacity-90 transition-all disabled:opacity-50 mt-4 shadow-lg shadow-primary/30"
                     >
-                        {loading ? 'Procesando...' : (isRegistering ? 'Registrarse' : 'Iniciar Sesión')}
+                        {formLoading ? 'Procesando...' : (isRegistering ? 'Registrarse' : 'Iniciar Sesión')}
                     </button>
                 </form>
 

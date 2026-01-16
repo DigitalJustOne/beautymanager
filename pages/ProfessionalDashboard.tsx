@@ -1,17 +1,11 @@
 import React from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useData } from '../context/DataContext';
 
 const ProfessionalDashboard: React.FC = () => {
+    const navigate = useNavigate();
     const { appointments, userProfile, updateAppointmentStatus } = useData();
-    const myAppointments = appointments.filter(a => a.professionalId === undefined /* Handle legacy */ ||
-        // In a real app, we need to match the professional ID linked to the user.
-        // For now, we rely on the backend RLS ensuring 'appointments' only contains allowed ones?
-        // Wait, DataContext fetches ALL appointments indiscriminately currently?
-        // Yes, DataContext 'fetchData' calls .select('*').
-        // But with RLS now enabled, it will ONLY return the allowed ones!
-        // So we can just use 'appointments' directly!
-        true
-    );
+    const myAppointments = appointments;
 
     // Sort by date
     const sortedAppointments = [...myAppointments].sort((a, b) =>
@@ -21,9 +15,18 @@ const ProfessionalDashboard: React.FC = () => {
     return (
         <div className="p-8">
             <header className="mb-8">
-                <h1 className="text-3xl font-bold text-text-main-light dark:text-text-main-dark mb-2">
-                    Hola, {userProfile.name}
-                </h1>
+                <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-2">
+                    <h1 className="text-3xl font-bold text-text-main-light dark:text-text-main-dark">
+                        Hola, {userProfile.name}
+                    </h1>
+                    <button
+                        onClick={() => navigate('/agenda')}
+                        className="flex items-center justify-center gap-2 bg-primary text-white px-6 py-3 rounded-xl font-bold hover:opacity-90 transition-all shadow-lg shadow-primary/20"
+                    >
+                        <span className="material-symbols-outlined">add</span>
+                        Nueva Cita
+                    </button>
+                </div>
                 <p className="text-text-sec-light dark:text-text-sec-dark">
                     Gestiona tus citas programadas.
                 </p>
@@ -49,8 +52,8 @@ const ProfessionalDashboard: React.FC = () => {
                                 </div>
                                 <div className="flex items-center gap-2">
                                     <span className={`px-3 py-1 rounded-full text-xs font-bold ${appt.status === 'confirmed' ? 'bg-green-100 text-green-700' :
-                                            appt.status === 'cancelled' ? 'bg-red-100 text-red-700' :
-                                                'bg-yellow-100 text-yellow-700'
+                                        appt.status === 'cancelled' ? 'bg-red-100 text-red-700' :
+                                            'bg-yellow-100 text-yellow-700'
                                         }`}>
                                         {appt.status.toUpperCase()}
                                     </span>

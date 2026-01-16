@@ -3,17 +3,23 @@ import { useData } from '../context/DataContext';
 import { Client, Appointment } from '../types';
 
 const Clients: React.FC = () => {
-    const { clients, appointments, addClient } = useData();
-    
+    const { clients, appointments, addClient, updateClient, deleteClient } = useData();
+
     // Estados para Modales
-    const [isNewClientModalOpen, setIsNewClientModalOpen] = useState(false);
+    const [isClientModalOpen, setIsClientModalOpen] = useState(false);
     const [selectedClient, setSelectedClient] = useState<Client | null>(null);
 
-    // Estados para Formulario Nuevo Cliente
-    const [newClientName, setNewClientName] = useState('');
-    const [newClientPhone, setNewClientPhone] = useState('');
-    const [newClientEmail, setNewClientEmail] = useState('');
-    const [formError, setFormError] = useState<string | null>(null); // Nuevo estado para errores
+    // Estado Edición/Creación
+    const [isEditing, setIsEditing] = useState(false);
+    const [editingClientId, setEditingClientId] = useState<number | null>(null);
+
+    // Estados para Formulario
+    const [clientName, setClientName] = useState('');
+    const [clientPhone, setClientPhone] = useState('');
+    const [clientEmail, setClientEmail] = useState('');
+    const [clientRole, setClientRole] = useState('client');
+    const [clientPassword, setClientPassword] = useState('');
+    const [formError, setFormError] = useState<string | null>(null);
 
     // Estados para Búsqueda y Paginación
     const [searchTerm, setSearchTerm] = useState('');
@@ -21,7 +27,7 @@ const Clients: React.FC = () => {
     const itemsPerPage = 5;
 
     // --- LÓGICA DE FILTRADO Y PAGINACIÓN ---
-    const filteredClients = clients.filter(client => 
+    const filteredClients = clients.filter(client =>
         client.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
         client.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
         client.phone.includes(searchTerm)
@@ -39,25 +45,49 @@ const Clients: React.FC = () => {
 
     const handleSearchChange = (e: React.ChangeEvent<HTMLInputElement>) => {
         setSearchTerm(e.target.value);
-        setCurrentPage(1); // Resetear a página 1 cuando se busca
+        setCurrentPage(1);
     };
 
-    // --- LÓGICA NUEVO CLIENTE ---
+    // --- LÓGICA FORMULARIO CLIENTE (CREAR / EDITAR) ---
     const handlePhoneChange = (e: React.ChangeEvent<HTMLInputElement>) => {
         const value = e.target.value.replace(/\D/g, '');
-        if (value.length <= 10) setNewClientPhone(value);
-        if (formError) setFormError(null); // Limpiar error al escribir
+        if (value.length <= 10) setClientPhone(value);
+        if (formError) setFormError(null);
     };
 
-    const handleCreateClient = (e: React.FormEvent) => {
+    const resetForm = () => {
+        setClientName('');
+        setClientPhone('');
+        setClientEmail('');
+        setClientRole('client');
+        setClientPassword('');
+        setFormError(null);
+        setIsEditing(false);
+        setEditingClientId(null);
+    };
+
+    const openModal = (client?: Client) => {
+        resetForm();
+        if (client) {
+            setIsEditing(true);
+            setEditingClientId(client.id);
+            setClientName(client.name);
+            setClientEmail(client.email);
+            setClientPhone(client.phone);
+            setClientRole(client.role || 'client');
+        }
+        setIsClientModalOpen(true);
+    };
+
+    const handleSaveClient = async (e: React.FormEvent) => {
         e.preventDefault();
         setFormError(null);
 
-        if (!newClientName || !newClientEmail || newClientPhone.length !== 10) return;
+        if (!clientName || !clientEmail || clientPhone.length !== 10) return;
 
-        // Validaciones de Duplicados
-        const emailExists = clients.some(c => c.email.toLowerCase() === newClientEmail.toLowerCase());
-        const phoneExists = clients.some(c => c.phone === newClientPhone);
+        // Validaciones de Duplicados (excluyendo al usuario actual si se edita)
+        const emailExists = clients.some(c => c.email.toLowerCase() === clientEmail.toLowerCase() && c.id !== editingClientId);
+        const phoneExists = clients.some(c => c.phone === clientPhone && c.id !== editingClientId);
 
         if (emailExists) {
             setFormError('El correo electrónico ya está registrado con otro cliente.');
@@ -69,70 +99,97 @@ const Clients: React.FC = () => {
             return;
         }
 
-        const avatarUrl = `https://ui-avatars.com/api/?name=${encodeURIComponent(newClientName)}&background=random`;
+        const avatarUrl = `https://ui-avatars.com/api/?name=${encodeURIComponent(clientName)}&background=random`;
 
-        addClient({
-            id: Date.now(),
-            name: newClientName,
-            email: newClientEmail,
-            phone: newClientPhone,
-            lastVisit: 'Nuevo', // Valor inicial
-            avatar: avatarUrl,
-            isNew: true
-        });
+        if (isEditing && editingClientId) {
+            // EDITAR
+            await updateClient(editingClientId, {
+                name: clientName,
+                email: clientEmail,
+                phone: clientPhone,
+                role: clientRole,
+                avatar: avatarUrl
+            });
+            // Nota: No actualizamos avatar si no cambió el nombre, pero ui-avatars depende del nombre.
+        } else {
+            // CREAR
+            await addClient({
+                id: Date.now(),
+                name: clientName,
+                email: clientEmail,
+                phone: clientPhone,
+                lastVisit: 'Nuevo',
+                avatar: avatarUrl,
+                isNew: true,
+                role: clientRole
+            });
 
-        // Reset y cerrar
-        setNewClientName('');
-        setNewClientPhone('');
-        setNewClientEmail('');
-        setFormError(null);
-        setIsNewClientModalOpen(false);
-        // Ir a la primera página para ver el nuevo cliente (si aplica filtro)
-        setSearchTerm('');
-        setCurrentPage(1);
+            if (clientPassword) {
+                alert(`IMPORTANTE: El cliente ha sido registrado.\n\nPara acceder, debe REGISTRARSE (Sign Up) usando el correo "${clientEmail}".`);
+            }
+        }
+
+        resetForm();
+        setIsClientModalOpen(false);
+        if (!isEditing) {
+            setSearchTerm('');
+            setCurrentPage(1);
+        }
     };
 
-    const openNewClientModal = () => {
-        setFormError(null);
-        setNewClientName('');
-        setNewClientPhone('');
-        setNewClientEmail('');
-        setIsNewClientModalOpen(true);
+    const handleDeleteClient = async (client: Client) => {
+        if (window.confirm(`¿Estás seguro de ELIMINAR al cliente "${client.name}"?\n\nEsta acción borrará sus datos permanentemente. Sin embargo, su historial de citas podría conservarse anonimizado.`)) {
+            await deleteClient(client.id);
+        }
     };
 
-    // --- HELPER DE ESTADO ---
+    // --- HELPER DE ESTADO (ACTUALIZADO) ---
     const getAppointmentStatus = (appt: Appointment) => {
         if (appt.status === 'cancelled') {
             return { label: 'Cancelado', color: 'bg-red-100 text-red-700', icon: 'cancel' };
         }
 
-        // Calcular si ya pasó la fecha y hora
         if (appt.date) {
             const now = new Date();
             const apptDate = new Date(appt.date);
             const [hours, minutes] = appt.time.split(':').map(Number);
             apptDate.setHours(hours, minutes, 0, 0);
 
-            if (now > apptDate) {
-                return { label: 'Completado', color: 'bg-blue-100 text-blue-700', icon: 'check_circle' };
+            // Calcular duración
+            let durationMinutes = 60;
+            const hMatch = appt.duration.match(/(\d+)h/);
+            const mMatch = appt.duration.match(/(\d+)m/);
+            if (hMatch) durationMinutes = parseInt(hMatch[1]) * 60;
+            if (mMatch) durationMinutes += parseInt(mMatch[1]);
+            else if (!hMatch && !mMatch) durationMinutes = 60;
+
+            const endTime = new Date(apptDate.getTime() + durationMinutes * 60000);
+
+            // EN SERVICIO
+            if (now >= apptDate && now < endTime && appt.status === 'confirmed') {
+                return { label: 'En Servicio', color: 'bg-indigo-100 text-indigo-700 dark:bg-indigo-900/30 dark:text-indigo-400', icon: 'timelapse' };
+            }
+
+            // FINALIZADO
+            if (now >= endTime) {
+                return { label: 'Finalizado', color: 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400', icon: 'check_circle' };
             }
         }
 
         if (appt.status === 'confirmed') {
-            return { label: 'Confirmado', color: 'bg-green-100 text-green-700', icon: 'verified' };
+            return { label: 'Confirmado', color: 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400', icon: 'verified' };
         }
-        
-        return { label: 'Pendiente', color: 'bg-orange-100 text-orange-700', icon: 'schedule' };
+
+        return { label: 'Pendiente', color: 'bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400', icon: 'schedule' };
     };
 
     // --- LÓGICA VER FICHA ---
     const getClientHistory = (clientName: string): Appointment[] => {
         return appointments.filter(appt => appt.client.toLowerCase() === clientName.toLowerCase())
-                           .sort((a, b) => {
-                               // Ordenar por fecha (si existe) o ID descendente
-                               if (a.date && b.date) return b.date.getTime() - a.date.getTime();
-                               return b.id - a.id;
-                           });
+            .sort((a, b) => {
+                if (a.date && b.date) return b.date.getTime() - a.date.getTime();
+                return b.id - a.id;
+            });
     };
 
     return (
@@ -144,25 +201,25 @@ const Clients: React.FC = () => {
                         <h1 className="text-[#111618] dark:text-white text-3xl md:text-4xl font-black leading-tight tracking-[-0.033em]">Gestión de Clientes</h1>
                         <p className="text-[#617c89] dark:text-slate-400 text-base font-normal">Administra tu base de datos de contactos y citas.</p>
                     </div>
-                    <button 
-                        onClick={openNewClientModal}
+                    <button
+                        onClick={() => openModal()}
                         className="flex items-center gap-2 cursor-pointer overflow-hidden rounded-full h-12 px-6 bg-primary hover:bg-sky-600 text-white shadow-lg shadow-primary/30 transition-all active:scale-95 group"
                     >
                         <span className="material-symbols-outlined text-[20px] group-hover:rotate-90 transition-transform">add</span>
                         <span className="text-sm font-bold leading-normal tracking-[0.015em] truncate">Nuevo Cliente</span>
                     </button>
                 </div>
-                
+
                 {/* Search */}
                 <div className="bg-white dark:bg-card-dark p-2 rounded-xl border border-[#e5e7eb] dark:border-[#2a3c45] shadow-sm">
                     <label className="flex items-center w-full h-12">
                         <div className="flex items-center justify-center pl-4 text-[#617c89] dark:text-slate-400">
                             <span className="material-symbols-outlined">search</span>
                         </div>
-                        <input 
+                        <input
                             value={searchTerm}
                             onChange={handleSearchChange}
-                            className="w-full h-full bg-transparent border-none focus:ring-0 text-[#111618] dark:text-white placeholder:text-[#9aaeb8] px-4 text-base font-normal" 
+                            className="w-full h-full bg-transparent border-none focus:ring-0 text-[#111618] dark:text-white placeholder:text-[#9aaeb8] px-4 text-base font-normal"
                             placeholder="Buscar por nombre, teléfono o correo..."
                         />
                         {searchTerm && (
@@ -179,10 +236,10 @@ const Clients: React.FC = () => {
                         <table className="w-full min-w-[800px]">
                             <thead>
                                 <tr className="bg-[#f8fafc] dark:bg-[#152229] border-b border-[#dbe2e6] dark:border-[#2a3c45]">
-                                    <th className="px-6 py-4 text-left text-xs font-bold uppercase tracking-wider text-[#617c89] dark:text-slate-400 w-[35%]">Cliente</th>
-                                    <th className="px-6 py-4 text-left text-xs font-bold uppercase tracking-wider text-[#617c89] dark:text-slate-400 w-[25%]">Celular</th>
+                                    <th className="px-6 py-4 text-left text-xs font-bold uppercase tracking-wider text-[#617c89] dark:text-slate-400 w-[30%]">Cliente</th>
+                                    <th className="px-6 py-4 text-left text-xs font-bold uppercase tracking-wider text-[#617c89] dark:text-slate-400 w-[20%]">Celular</th>
                                     <th className="px-6 py-4 text-left text-xs font-bold uppercase tracking-wider text-[#617c89] dark:text-slate-400 w-[25%]">Email</th>
-                                    <th className="px-6 py-4 text-right text-xs font-bold uppercase tracking-wider text-[#617c89] dark:text-slate-400 w-[15%]">Acciones</th>
+                                    <th className="px-6 py-4 text-right text-xs font-bold uppercase tracking-wider text-[#617c89] dark:text-slate-400 w-[25%]">Acciones</th>
                                 </tr>
                             </thead>
                             <tbody className="divide-y divide-[#dbe2e6] dark:divide-[#2a3c45]">
@@ -190,11 +247,11 @@ const Clients: React.FC = () => {
                                     <tr key={client.id} className="group hover:bg-[#fcfdfd] dark:hover:bg-[#1f3039] transition-colors">
                                         <td className="px-6 py-4">
                                             <div className="flex items-center gap-4">
-                                                <div className="size-10 rounded-full bg-cover bg-center shrink-0 border border-gray-100 dark:border-gray-700" style={{backgroundImage: `url("${client.avatar}")`}}></div>
+                                                <div className="size-10 rounded-full bg-cover bg-center shrink-0 border border-gray-100 dark:border-gray-700" style={{ backgroundImage: `url("${client.avatar}")` }}></div>
                                                 <div>
                                                     <p className="text-[#111618] dark:text-white text-sm font-bold">{client.name}</p>
-                                                    <p className="text-[#617c89] dark:text-slate-400 text-xs">
-                                                        {client.isNew ? 'Nuevo Cliente' : `Última visita: ${client.lastVisit}`}
+                                                    <p className="text-[#617c89] dark:text-slate-400 text-xs text-xs font-medium bg-gray-100 dark:bg-white/10 px-1.5 py-0.5 rounded mt-0.5 inline-block">
+                                                        {client.role === 'admin' ? 'Admin' : client.role === 'professional' ? 'Profesional' : 'Cliente'}
                                                     </p>
                                                 </div>
                                             </div>
@@ -207,12 +264,29 @@ const Clients: React.FC = () => {
                                         </td>
                                         <td className="px-6 py-4"><span className="text-[#617c89] dark:text-slate-300 text-sm">{client.email}</span></td>
                                         <td className="px-6 py-4 text-right">
-                                            <button 
-                                                onClick={() => setSelectedClient(client)}
-                                                className="text-primary hover:text-[#1a8bc5] hover:bg-primary/10 rounded-full px-4 py-2 text-xs font-bold transition-colors"
-                                            >
-                                                Ver Ficha
-                                            </button>
+                                            <div className="flex items-center justify-end gap-2">
+                                                <button
+                                                    onClick={() => setSelectedClient(client)}
+                                                    className="bg-blue-50 text-blue-600 dark:bg-blue-900/20 dark:text-blue-400 hover:bg-blue-100 rounded-full p-2 transition-colors"
+                                                    title="Ver Ficha y Historial"
+                                                >
+                                                    <span className="material-symbols-outlined text-[20px]">visibility</span>
+                                                </button>
+                                                <button
+                                                    onClick={() => openModal(client)}
+                                                    className="bg-orange-50 text-orange-600 dark:bg-orange-900/20 dark:text-orange-400 hover:bg-orange-100 rounded-full p-2 transition-colors"
+                                                    title="Editar Cliente"
+                                                >
+                                                    <span className="material-symbols-outlined text-[20px]">edit</span>
+                                                </button>
+                                                <button
+                                                    onClick={() => handleDeleteClient(client)}
+                                                    className="bg-red-50 text-red-600 dark:bg-red-900/20 dark:text-red-400 hover:bg-red-100 rounded-full p-2 transition-colors"
+                                                    title="Eliminar Cliente"
+                                                >
+                                                    <span className="material-symbols-outlined text-[20px]">delete</span>
+                                                </button>
+                                            </div>
                                         </td>
                                     </tr>
                                 ))}
@@ -232,19 +306,19 @@ const Clients: React.FC = () => {
                             Mostrando {filteredClients.length === 0 ? 0 : startIndex + 1} - {Math.min(startIndex + itemsPerPage, filteredClients.length)} de {filteredClients.length} resultados
                         </span>
                         <div className="flex items-center gap-2">
-                            <button 
+                            <button
                                 onClick={() => goToPage(currentPage - 1)}
                                 disabled={currentPage === 1}
                                 className="size-9 flex items-center justify-center rounded-full hover:bg-white dark:hover:bg-slate-700 border border-transparent hover:border-gray-200 dark:hover:border-slate-600 text-[#111618] dark:text-white transition-all disabled:opacity-30 disabled:cursor-not-allowed shadow-sm disabled:shadow-none"
                             >
                                 <span className="material-symbols-outlined text-[20px]">chevron_left</span>
                             </button>
-                            
+
                             <span className="text-xs font-bold px-3 py-1 bg-white dark:bg-card-dark rounded-md border border-gray-200 dark:border-slate-700">
                                 {currentPage} / {totalPages || 1}
                             </span>
 
-                            <button 
+                            <button
                                 onClick={() => goToPage(currentPage + 1)}
                                 disabled={currentPage === totalPages || totalPages === 0}
                                 className="size-9 flex items-center justify-center rounded-full hover:bg-white dark:hover:bg-slate-700 border border-transparent hover:border-gray-200 dark:hover:border-slate-600 text-[#111618] dark:text-white transition-all disabled:opacity-30 disabled:cursor-not-allowed shadow-sm disabled:shadow-none"
@@ -256,18 +330,18 @@ const Clients: React.FC = () => {
                 </div>
             </div>
 
-            {/* --- MODAL NUEVO CLIENTE --- */}
-            {isNewClientModalOpen && (
+            {/* --- MODAL FORMULARIO CLIENTE --- */}
+            {isClientModalOpen && (
                 <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4 animate-in fade-in duration-200" onClick={(e) => e.stopPropagation()}>
                     <div className="bg-card-light dark:bg-card-dark rounded-2xl shadow-2xl w-full max-w-lg overflow-hidden border border-border-light dark:border-border-dark animate-in zoom-in-95 duration-200 flex flex-col">
                         <div className="p-4 border-b border-border-light dark:border-border-dark flex justify-between items-center bg-primary text-white shrink-0">
                             <div className="flex items-center gap-2">
-                                <span className="material-symbols-outlined">person_add</span>
-                                <h3 className="font-bold text-lg">Nuevo Cliente</h3>
+                                <span className="material-symbols-outlined">{isEditing ? 'edit' : 'person_add'}</span>
+                                <h3 className="font-bold text-lg">{isEditing ? 'Editar Cliente' : 'Nuevo Cliente'}</h3>
                             </div>
-                            <button onClick={() => setIsNewClientModalOpen(false)} className="hover:bg-white/20 rounded-full p-1 transition-colors"><span className="material-symbols-outlined">close</span></button>
+                            <button onClick={() => setIsClientModalOpen(false)} className="hover:bg-white/20 rounded-full p-1 transition-colors"><span className="material-symbols-outlined">close</span></button>
                         </div>
-                        <form onSubmit={handleCreateClient} className="p-6 flex flex-col gap-5">
+                        <form onSubmit={handleSaveClient} className="p-6 flex flex-col gap-5">
                             {formError && (
                                 <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 text-red-600 dark:text-red-400 p-3 rounded-xl flex items-center gap-3 animate-in fade-in slide-in-from-top-1">
                                     <span className="material-symbols-outlined fill">error</span>
@@ -279,14 +353,30 @@ const Clients: React.FC = () => {
                                 <label className="text-sm font-bold text-text-main-light dark:text-text-main-dark">Nombre Completo</label>
                                 <div className="relative">
                                     <span className="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-text-sec-light">person</span>
-                                    <input 
-                                        required 
-                                        type="text" 
-                                        value={newClientName} 
-                                        onChange={(e) => { setNewClientName(e.target.value); setFormError(null); }} 
-                                        placeholder="Ej: María Pérez" 
+                                    <input
+                                        required
+                                        type="text"
+                                        value={clientName}
+                                        onChange={(e) => { setClientName(e.target.value); setFormError(null); }}
+                                        placeholder="Ej: María Pérez"
                                         className="w-full rounded-xl border border-border-light dark:border-border-dark bg-background-light dark:bg-background-dark pl-10 pr-4 h-12 text-sm focus:border-primary focus:ring-1 focus:ring-primary dark:text-white outline-none transition-all"
                                     />
+                                </div>
+                            </div>
+                            <div className="flex flex-col gap-2">
+                                <label className="text-sm font-bold text-text-main-light dark:text-text-main-dark">Rol Asignado</label>
+                                <div className="relative">
+                                    <span className="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-text-sec-light">badge</span>
+                                    <select
+                                        value={clientRole}
+                                        onChange={(e) => setClientRole(e.target.value)}
+                                        className="w-full rounded-xl border border-border-light dark:border-border-dark bg-background-light dark:bg-background-dark pl-10 pr-4 h-12 text-sm focus:border-primary focus:ring-1 focus:ring-primary dark:text-white outline-none transition-all appearance-none"
+                                    >
+                                        <option value="client">Cliente</option>
+                                        <option value="professional">Profesional</option>
+                                        <option value="admin">Administrador</option>
+                                    </select>
+                                    <span className="material-symbols-outlined absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 pointer-events-none">expand_more</span>
                                 </div>
                             </div>
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -294,13 +384,13 @@ const Clients: React.FC = () => {
                                     <label className="text-sm font-bold text-text-main-light dark:text-text-main-dark">Celular</label>
                                     <div className="relative">
                                         <span className="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-text-sec-light">smartphone</span>
-                                        <input 
-                                            required 
-                                            type="tel" 
-                                            maxLength={10} 
-                                            value={newClientPhone} 
-                                            onChange={handlePhoneChange} 
-                                            placeholder="10 dígitos" 
+                                        <input
+                                            required
+                                            type="tel"
+                                            maxLength={10}
+                                            value={clientPhone}
+                                            onChange={handlePhoneChange}
+                                            placeholder="10 dígitos"
                                             className={`w-full rounded-xl border ${formError?.includes('celular') ? 'border-red-500' : 'border-border-light dark:border-border-dark'} bg-background-light dark:bg-background-dark pl-10 pr-4 h-12 text-sm focus:border-primary focus:ring-1 focus:ring-primary dark:text-white outline-none transition-all`}
                                         />
                                     </div>
@@ -309,76 +399,70 @@ const Clients: React.FC = () => {
                                     <label className="text-sm font-bold text-text-main-light dark:text-text-main-dark">Email</label>
                                     <div className="relative">
                                         <span className="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-text-sec-light">mail</span>
-                                        <input 
-                                            required 
-                                            type="email" 
-                                            value={newClientEmail} 
-                                            onChange={(e) => { setNewClientEmail(e.target.value); setFormError(null); }} 
-                                            placeholder="cliente@email.com" 
+                                        <input
+                                            required
+                                            type="email"
+                                            value={clientEmail}
+                                            onChange={(e) => { setClientEmail(e.target.value); setFormError(null); }}
+                                            placeholder="cliente@email.com"
                                             className={`w-full rounded-xl border ${formError?.includes('correo') ? 'border-red-500' : 'border-border-light dark:border-border-dark'} bg-background-light dark:bg-background-dark pl-10 pr-4 h-12 text-sm focus:border-primary focus:ring-1 focus:ring-primary dark:text-white outline-none transition-all`}
                                         />
                                     </div>
                                 </div>
+                                {!isEditing && (
+                                    <div className="flex flex-col gap-2">
+                                        <label className="text-sm font-bold text-text-main-light dark:text-text-main-dark">Contraseña (Opcional)</label>
+                                        <div className="relative">
+                                            <span className="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-text-sec-light">lock</span>
+                                            <input
+                                                type="password"
+                                                value={clientPassword}
+                                                onChange={(e) => setClientPassword(e.target.value)}
+                                                placeholder="Establecer contraseña inicial"
+                                                className="w-full rounded-xl border border-border-light dark:border-border-dark bg-background-light dark:bg-background-dark pl-10 pr-4 h-12 text-sm focus:border-primary focus:ring-1 focus:ring-primary dark:text-white outline-none transition-all"
+                                            />
+                                        </div>
+                                        <p className="text-xs text-text-sec-light">Si estableces una contraseña, comunícasela al cliente.</p>
+                                    </div>
+                                )}
                             </div>
                             <div className="flex gap-3 mt-2 pt-4 border-t border-border-light dark:border-border-dark">
-                                <button type="button" onClick={() => setIsNewClientModalOpen(false)} className="flex-1 py-3 rounded-xl font-bold text-text-sec-light dark:text-text-sec-dark hover:bg-background-light dark:hover:bg-background-dark transition-colors">Cancelar</button>
-                                <button type="submit" disabled={!newClientName || !newClientEmail || newClientPhone.length !== 10} className="flex-1 py-3 rounded-xl bg-primary text-white font-bold hover:bg-primary/90 transition-colors shadow-lg shadow-primary/20 disabled:opacity-50 flex items-center justify-center gap-2">
+                                <button type="button" onClick={() => setIsClientModalOpen(false)} className="flex-1 py-3 rounded-xl font-bold text-text-sec-light dark:text-text-sec-dark hover:bg-background-light dark:hover:bg-background-dark transition-colors">Cancelar</button>
+                                <button type="submit" disabled={!clientName || !clientEmail || clientPhone.length !== 10} className="flex-1 py-3 rounded-xl bg-primary text-white font-bold hover:bg-primary/90 transition-colors shadow-lg shadow-primary/20 disabled:opacity-50 flex items-center justify-center gap-2">
                                     <span className="material-symbols-outlined text-[20px]">save</span>
-                                    Guardar Cliente
+                                    {isEditing ? 'Guardar Cambios' : 'Registrar Cliente'}
                                 </button>
                             </div>
                         </form>
-                    </div>
-                </div>
+                    </div >
+                </div >
             )}
 
-            {/* --- MODAL VER FICHA CLIENTE (REDSEÑADO) --- */}
+            {/* --- MODAL VER FICHA CLIENTE --- */}
             {selectedClient && (
                 <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4 animate-in fade-in duration-200" onClick={() => setSelectedClient(null)}>
                     <div className="bg-white dark:bg-card-dark rounded-3xl shadow-2xl w-full max-w-sm overflow-hidden animate-in zoom-in-95 duration-200 max-h-[90vh] flex flex-col relative" onClick={(e) => e.stopPropagation()}>
-                        
                         <div className="flex-1 overflow-y-auto scrollbar-hide relative flex flex-col">
-                            
                             {/* Header Blue Background */}
                             <div className="h-24 bg-primary w-full shrink-0 relative">
-                                {/* Close Button - Top Right */}
-                                <button 
-                                    onClick={() => setSelectedClient(null)} 
-                                    className="absolute top-4 right-4 bg-black/20 hover:bg-black/30 text-white rounded-full p-1.5 transition-colors backdrop-blur-sm z-10"
-                                >
-                                    <span className="material-symbols-outlined text-lg font-bold">close</span>
-                                </button>
+                                <button onClick={() => setSelectedClient(null)} className="absolute top-4 right-4 bg-black/20 hover:bg-black/30 text-white rounded-full p-1.5 transition-colors backdrop-blur-sm z-10"><span className="material-symbols-outlined text-lg font-bold">close</span></button>
                             </div>
-
-                            {/* Content Container */}
                             <div className="px-6 pb-8 flex flex-col items-center bg-white dark:bg-card-dark min-h-full">
-                                
-                                {/* Avatar - Overlapping */}
                                 <div className="-mt-12 mb-3 relative z-10">
-                                    <div className="size-24 rounded-full border-[5px] border-white dark:border-card-dark bg-cover bg-center bg-gray-200 shadow-sm" style={{backgroundImage: `url("${selectedClient.avatar}")`}}></div>
+                                    <div className="size-24 rounded-full border-[5px] border-white dark:border-card-dark bg-cover bg-center bg-gray-200 shadow-sm" style={{ backgroundImage: `url("${selectedClient.avatar}")` }}></div>
                                 </div>
-
-                                {/* Name & Email */}
                                 <h3 className="text-xl font-black text-[#111618] dark:text-white text-center leading-tight">{selectedClient.name}</h3>
                                 <p className="text-[#617c89] dark:text-slate-400 text-sm text-center font-medium mt-1">{selectedClient.email}</p>
-
-                                {/* Contact Actions Row */}
                                 <div className="flex items-center gap-3 w-full mt-6 mb-6">
-                                    {/* Phone Button (Wide) */}
                                     <a href={`tel:${selectedClient.phone}`} className="flex-1 flex items-center justify-center gap-2 bg-[#f6f8fa] dark:bg-slate-800 hover:bg-gray-100 dark:hover:bg-slate-700 h-12 rounded-2xl transition-colors group">
                                         <span className="material-symbols-outlined text-green-500 fill text-[22px] group-hover:scale-110 transition-transform">call</span>
                                         <span className="text-[#111618] dark:text-white font-bold text-sm">{selectedClient.phone}</span>
                                     </a>
-                                    
-                                    {/* Email Button (Circle) */}
                                     <a href={`mailto:${selectedClient.email}`} className="size-12 flex items-center justify-center bg-[#f6f8fa] dark:bg-slate-800 hover:bg-gray-100 dark:hover:bg-slate-700 rounded-full transition-colors group shrink-0">
                                         <span className="material-symbols-outlined text-[#3b82f6] text-[22px] group-hover:scale-110 transition-transform">mail</span>
                                     </a>
                                 </div>
-
-                                {/* Stats Cards Row */}
                                 <div className="grid grid-cols-2 gap-4 w-full mb-8">
-                                    {/* Status Card */}
                                     <div className="flex flex-col items-center justify-center p-4 rounded-3xl border border-[#f0f2f5] dark:border-slate-800 shadow-sm">
                                         <span className="text-[10px] font-bold text-[#9aaeb8] uppercase tracking-wider mb-1">ESTADO</span>
                                         <div className="flex items-center gap-1.5">
@@ -386,21 +470,16 @@ const Clients: React.FC = () => {
                                             <span className="text-sm font-black text-[#111618] dark:text-white">{selectedClient.isNew ? 'Nuevo' : 'Recurrente'}</span>
                                         </div>
                                     </div>
-                                    
-                                    {/* Last Visit Card */}
                                     <div className="flex flex-col items-center justify-center p-4 rounded-3xl border border-[#f0f2f5] dark:border-slate-800 shadow-sm">
                                         <span className="text-[10px] font-bold text-[#9aaeb8] uppercase tracking-wider mb-1">ÚLTIMA VISITA</span>
                                         <span className="text-sm font-black text-[#111618] dark:text-white">{selectedClient.lastVisit}</span>
                                     </div>
                                 </div>
-
-                                {/* History Section */}
                                 <div className="w-full">
                                     <h4 className="flex items-center gap-2 font-bold text-[#111618] dark:text-white text-sm mb-4">
                                         <span className="material-symbols-outlined text-primary text-[20px]">history</span>
                                         Historial de Citas
                                     </h4>
-                                    
                                     <div className="flex flex-col gap-3">
                                         {getClientHistory(selectedClient.name).length > 0 ? (
                                             getClientHistory(selectedClient.name).map(appt => {
@@ -410,7 +489,7 @@ const Clients: React.FC = () => {
                                                         <div className="flex flex-col gap-1">
                                                             <span className="font-bold text-sm text-[#111618] dark:text-white">{appt.service}</span>
                                                             <span className="text-xs font-medium text-[#617c89] capitalize">
-                                                                {appt.date ? appt.date.toLocaleDateString('es-ES', {weekday: 'short', day: 'numeric', month: 'short'}) : 'Fecha desconocida'} • {appt.time}
+                                                                {appt.date ? appt.date.toLocaleDateString('es-ES', { weekday: 'short', day: 'numeric', month: 'short' }) : 'Fecha desconocida'} • {appt.time}
                                                             </span>
                                                         </div>
                                                         <span className={`px-3 py-1.5 rounded-full text-[10px] font-bold flex items-center gap-1 ${status.color}`}>
@@ -431,7 +510,7 @@ const Clients: React.FC = () => {
                     </div>
                 </div>
             )}
-        </div>
+        </div >
     );
 };
 

@@ -30,12 +30,14 @@ const Team: React.FC = () => {
     const [formData, setFormData] = useState({
         name: '',
         role: '',
+        email: '',
+        password: '',
         avatar: '',
         specialties: [] as string[]
     });
 
     const resetForm = () => {
-        setFormData({ name: '', role: '', avatar: '', specialties: [] });
+        setFormData({ name: '', role: '', email: '', password: '', avatar: '', specialties: [] });
         setEditingProId(null);
     };
 
@@ -45,6 +47,8 @@ const Team: React.FC = () => {
             setFormData({
                 name: pro.name,
                 role: pro.role,
+                email: pro.email || '', // Assuming email exists in type
+                password: '', // Don't show existing password
                 avatar: pro.avatar,
                 specialties: pro.specialties
             });
@@ -57,7 +61,13 @@ const Team: React.FC = () => {
 
     const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault();
-        if (!formData.name || !formData.role) return;
+        if (!formData.name || !formData.role || !formData.email) return;
+
+        // Note: Creation of actual Auth User requires backend trigger or manual signup.
+        // We will store the email so they can sign up.
+        if (!editingProId && formData.password) {
+            alert(`IMPORTANTE: El perfil se creará para "${formData.email}".\n\nEl usuario debe REGISTRARSE (Sign Up) usando este correo y contraseña para acceder a su dashboard.`);
+        }
 
         if (editingProId) {
             updateProfessional(editingProId, formData);
@@ -108,7 +118,7 @@ const Team: React.FC = () => {
                         <h1 className="text-[#111618] dark:text-white text-3xl md:text-4xl font-black leading-tight tracking-[-0.033em]">Mi Equipo</h1>
                         <p className="text-[#617c89] dark:text-slate-400 text-base font-normal">Gestiona los profesionales y sus permisos en el salón.</p>
                     </div>
-                    <button 
+                    <button
                         onClick={() => handleOpenModal()}
                         className="flex items-center gap-2 cursor-pointer overflow-hidden rounded-full h-12 px-6 bg-primary hover:bg-sky-600 text-white shadow-lg shadow-primary/30 transition-all active:scale-95 group"
                     >
@@ -132,7 +142,7 @@ const Team: React.FC = () => {
                             </div>
 
                             <div className="flex flex-col items-center mb-4">
-                                <div className="size-20 rounded-full bg-cover bg-center border-4 border-gray-50 dark:border-gray-800 shadow-sm mb-3" style={{backgroundImage: `url("${pro.avatar}")`}}></div>
+                                <div className="size-20 rounded-full bg-cover bg-center border-4 border-gray-50 dark:border-gray-800 shadow-sm mb-3" style={{ backgroundImage: `url("${pro.avatar}")` }}></div>
                                 <h3 className="text-lg font-bold text-[#111618] dark:text-white">{pro.name}</h3>
                                 <p className="text-sm text-primary font-medium">{pro.role}</p>
                             </div>
@@ -155,9 +165,9 @@ const Team: React.FC = () => {
                             </div>
                         </div>
                     ))}
-                    
+
                     {/* Add Card (Empty State) */}
-                    <button 
+                    <button
                         onClick={() => handleOpenModal()}
                         className="flex flex-col items-center justify-center min-h-[300px] rounded-2xl border-2 border-dashed border-gray-200 dark:border-gray-700 hover:border-primary hover:bg-primary/5 transition-all group"
                     >
@@ -177,12 +187,12 @@ const Team: React.FC = () => {
                             <h3 className="font-bold text-lg">{editingProId ? 'Editar Profesional' : 'Nuevo Profesional'}</h3>
                             <button onClick={() => setIsModalOpen(false)} className="hover:bg-white/20 rounded-full p-1"><span className="material-symbols-outlined">close</span></button>
                         </div>
-                        
+
                         <form onSubmit={handleSubmit} className="flex-1 overflow-y-auto p-6 flex flex-col gap-6">
                             {/* Avatar Upload */}
                             <div className="flex justify-center">
                                 <div className="relative group cursor-pointer" onClick={() => fileInputRef.current?.click()}>
-                                    <div className="size-24 rounded-full bg-cover bg-center border-4 border-gray-100 dark:border-gray-700" style={{backgroundImage: `url("${formData.avatar}")`}}></div>
+                                    <div className="size-24 rounded-full bg-cover bg-center border-4 border-gray-100 dark:border-gray-700" style={{ backgroundImage: `url("${formData.avatar}")` }}></div>
                                     <div className="absolute inset-0 bg-black/40 rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
                                         <span className="material-symbols-outlined text-white">camera_alt</span>
                                     </div>
@@ -190,25 +200,54 @@ const Team: React.FC = () => {
                                 </div>
                             </div>
 
-                            <div className="flex flex-col gap-4">
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                 <label className="flex flex-col gap-2">
                                     <span className="text-sm font-bold text-gray-700 dark:text-gray-200">Nombre Completo</span>
-                                    <input 
+                                    <input
                                         required
-                                        value={formData.name} 
-                                        onChange={e => setFormData({...formData, name: e.target.value})}
+                                        value={formData.name}
+                                        onChange={e => setFormData({ ...formData, name: e.target.value })}
                                         className="form-input w-full rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 px-4 h-12 text-sm focus:border-primary focus:ring-primary dark:text-white"
                                         placeholder="Ej: Laura Méndez"
                                     />
                                 </label>
                                 <label className="flex flex-col gap-2">
                                     <span className="text-sm font-bold text-gray-700 dark:text-gray-200">Cargo / Rol</span>
-                                    <input 
+                                    <div className="relative">
+                                        <select
+                                            required
+                                            value={formData.role}
+                                            onChange={e => setFormData({ ...formData, role: e.target.value })}
+                                            className="form-input w-full rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 px-4 h-12 text-sm focus:border-primary focus:ring-primary dark:text-white appearance-none"
+                                        >
+                                            <option value="" disabled>Seleccionar rol...</option>
+                                            <option value="admin">Administrador</option>
+                                            <option value="professional">Profesional</option>
+                                            <option value="client">Cliente</option>
+                                        </select>
+                                        <span className="material-symbols-outlined absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 pointer-events-none">expand_more</span>
+                                    </div>
+                                </label>
+                                <label className="flex flex-col gap-2">
+                                    <span className="text-sm font-bold text-gray-700 dark:text-gray-200">Email (Login)</span>
+                                    <input
                                         required
-                                        value={formData.role} 
-                                        onChange={e => setFormData({...formData, role: e.target.value})}
+                                        type="email"
+                                        value={formData.email}
+                                        onChange={e => setFormData({ ...formData, email: e.target.value })}
                                         className="form-input w-full rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 px-4 h-12 text-sm focus:border-primary focus:ring-primary dark:text-white"
-                                        placeholder="Ej: Manicurista Senior"
+                                        placeholder="usuario@beautymanager.com"
+                                    />
+                                </label>
+                                <label className="flex flex-col gap-2">
+                                    <span className="text-sm font-bold text-gray-700 dark:text-gray-200">Contraseña</span>
+                                    <input
+                                        type="password"
+                                        value={formData.password}
+                                        onChange={e => setFormData({ ...formData, password: e.target.value })}
+                                        className="form-input w-full rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 px-4 h-12 text-sm focus:border-primary focus:ring-primary dark:text-white"
+                                        placeholder={editingProId ? "(Dejar en blanco para mantener)" : "Contraseña inicial"}
+                                        minLength={6}
                                     />
                                 </label>
                             </div>
@@ -223,11 +262,10 @@ const Team: React.FC = () => {
                                                 type="button"
                                                 key={service}
                                                 onClick={() => toggleSpecialty(service)}
-                                                className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all border ${
-                                                    isSelected 
-                                                    ? 'bg-primary text-white border-primary shadow-sm' 
+                                                className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all border ${isSelected
+                                                    ? 'bg-primary text-white border-primary shadow-sm'
                                                     : 'bg-white dark:bg-gray-800 text-gray-500 dark:text-gray-400 border-gray-200 dark:border-gray-700 hover:border-gray-300'
-                                                }`}
+                                                    }`}
                                             >
                                                 {isSelected && <span className="mr-1">✓</span>}
                                                 {service}

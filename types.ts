@@ -9,6 +9,7 @@ export interface Appointment {
     avatar: string;
     status: 'confirmed' | 'pending' | 'cancelled';
     date?: Date;
+    clientId?: number;
     professionalId?: number; // Nuevo campo
     professionalName?: string; // Nuevo campo
     price?: string; // Nuevo campo para el precio
@@ -22,6 +23,7 @@ export interface Client {
     email: string;
     avatar: string;
     isNew?: boolean;
+    role?: string;
 }
 
 export interface Professional {
@@ -29,6 +31,7 @@ export interface Professional {
     name: string;
     role: string;
     avatar: string;
+    email?: string; // Contacto / Login
     specialties: string[]; // Lista de servicios que puede realizar
 }
 
@@ -59,6 +62,7 @@ export interface UserProfile {
     phone: string;
     email: string;
     avatar: string;
+    city?: string; // New field
     isGoogleCalendarConnected: boolean;
     schedule: DaySchedule[];
 }
