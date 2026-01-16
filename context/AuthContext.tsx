@@ -6,6 +6,7 @@ import { Session, User } from '@supabase/supabase-js';
 interface AuthContextType {
     session: Session | null;
     user: User | null;
+    role: string | null;
     loading: boolean;
     signOut: () => Promise<void>;
 }
@@ -15,18 +16,44 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
     const [session, setSession] = useState<Session | null>(null);
     const [user, setUser] = useState<User | null>(null);
+    const [role, setRole] = useState<string | null>(null);
     const [loading, setLoading] = useState(true);
 
     useEffect(() => {
-        supabase.auth.getSession().then(({ data: { session } }) => {
+        const fetchSessionAndRole = async () => {
+            const { data: { session } } = await supabase.auth.getSession();
             setSession(session);
             setUser(session?.user ?? null);
-            setLoading(false);
-        });
 
-        const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+            if (session?.user) {
+                const { data: profile } = await supabase
+                    .from('profiles')
+                    .select('role')
+                    .eq('id', session.user.id)
+                    .single();
+                setRole(profile?.role || 'client');
+            }
+
+            setLoading(false);
+        };
+
+        fetchSessionAndRole();
+
+        const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, session) => {
             setSession(session);
             setUser(session?.user ?? null);
+
+            if (session?.user) {
+                const { data: profile } = await supabase
+                    .from('profiles')
+                    .select('role')
+                    .eq('id', session.user.id)
+                    .single();
+                setRole(profile?.role || 'client');
+            } else {
+                setRole(null);
+            }
+
             setLoading(false);
         });
 
@@ -38,7 +65,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     };
 
     return (
-        <AuthContext.Provider value={{ session, user, loading, signOut }}>
+        <AuthContext.Provider value={{ session, user, role, loading, signOut }}>
             {children}
         </AuthContext.Provider>
     );

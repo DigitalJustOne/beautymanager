@@ -50,19 +50,33 @@ const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
 
                         {/* Navigation Links */}
                         <nav className="flex flex-col gap-2">
-                            {menuItems.map((item) => (
-                                <Link
-                                    key={item.path}
-                                    to={item.path}
-                                    className={`flex items-center gap-3 px-4 py-3 rounded-full transition-all ${location.pathname === item.path
-                                        ? 'bg-primary/10 text-primary'
-                                        : 'text-text-sec-light dark:text-text-sec-dark hover:bg-background-light dark:hover:bg-background-dark hover:text-text-main-light dark:hover:text-text-main-dark'
-                                        }`}
-                                >
-                                    <span className={`material-symbols-outlined ${location.pathname === item.path ? 'fill' : ''}`}>{item.icon}</span>
-                                    <span className={`text-sm ${location.pathname === item.path ? 'font-bold' : 'font-medium'}`}>{item.label}</span>
-                                </Link>
-                            ))}
+                            {menuItems.filter(item => {
+                                if (userProfile.role === 'admin') return true;
+                                if (userProfile.role === 'professional') return ['Dashboard', 'Agenda', 'Settings'].includes(item.label);
+                                if (userProfile.role === 'client') return ['Dashboard', 'Ajustes'].includes(item.label);
+                                return false; // Default hidden
+                            }).map((item) => {
+                                let path = item.path;
+                                // Redirect Dashboard link based on role
+                                if (item.label === 'Dashboard') {
+                                    if (userProfile.role === 'professional') path = '/professional';
+                                    if (userProfile.role === 'client') path = '/client';
+                                }
+
+                                return (
+                                    <Link
+                                        key={item.path}
+                                        to={path}
+                                        className={`flex items-center gap-3 px-4 py-3 rounded-full transition-all ${location.pathname === path
+                                            ? 'bg-primary/10 text-primary'
+                                            : 'text-text-sec-light dark:text-text-sec-dark hover:bg-background-light dark:hover:bg-background-dark hover:text-text-main-light dark:hover:text-text-main-dark'
+                                            }`}
+                                    >
+                                        <span className={`material-symbols-outlined ${location.pathname === path ? 'fill' : ''}`}>{item.icon}</span>
+                                        <span className={`text-sm ${location.pathname === path ? 'font-bold' : 'font-medium'}`}>{item.label}</span>
+                                    </Link>
+                                );
+                            })}
                         </nav>
                     </div>
 
@@ -96,20 +110,32 @@ const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
                             </button>
                         </div>
                         <nav className="flex flex-col gap-2">
-                            {menuItems.map((item) => (
-                                <Link
-                                    key={item.path}
-                                    to={item.path}
-                                    onClick={closeMobileMenu}
-                                    className={`flex items-center gap-3 px-4 py-3 rounded-full transition-all ${location.pathname === item.path
-                                        ? 'bg-primary/10 text-primary'
-                                        : 'text-text-sec-light dark:text-text-sec-dark hover:bg-background-light dark:hover:bg-background-dark'
-                                        }`}
-                                >
-                                    <span className={`material-symbols-outlined ${location.pathname === item.path ? 'fill' : ''}`}>{item.icon}</span>
-                                    <span className="text-sm font-medium">{item.label}</span>
-                                </Link>
-                            ))}
+                            {menuItems.filter(item => {
+                                if (userProfile.role === 'admin') return true;
+                                if (userProfile.role === 'professional') return ['Dashboard', 'Agenda', 'Settings'].includes(item.label);
+                                if (userProfile.role === 'client') return ['Dashboard', 'Ajustes'].includes(item.label);
+                                return false;
+                            }).map((item) => {
+                                let path = item.path;
+                                if (item.label === 'Dashboard') {
+                                    if (userProfile.role === 'professional') path = '/professional';
+                                    if (userProfile.role === 'client') path = '/client';
+                                }
+                                return (
+                                    <Link
+                                        key={item.path}
+                                        to={path}
+                                        onClick={closeMobileMenu}
+                                        className={`flex items-center gap-3 px-4 py-3 rounded-full transition-all ${location.pathname === path
+                                                ? 'bg-primary/10 text-primary'
+                                                : 'text-text-sec-light dark:text-text-sec-dark hover:bg-background-light dark:hover:bg-background-dark'
+                                            }`}
+                                    >
+                                        <span className={`material-symbols-outlined ${location.pathname === path ? 'fill' : ''}`}>{item.icon}</span>
+                                        <span className="text-sm font-medium">{item.label}</span>
+                                    </Link>
+                                )
+                            })}
                         </nav>
                     </div>
                     {/* Mobile Logout */}

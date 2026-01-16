@@ -7,6 +7,8 @@ import Clients from './pages/Clients';
 import Team from './pages/Team';
 import Settings from './pages/Settings';
 import Login from './pages/Login';
+import ProfessionalDashboard from './pages/ProfessionalDashboard';
+import ClientDashboard from './pages/ClientDashboard';
 import { DataProvider } from './context/DataContext';
 import { AuthProvider, useAuth } from './context/AuthContext';
 
@@ -38,6 +40,16 @@ const App: React.FC = () => {
                         <Route path="/" element={
                             <ProtectedRoute>
                                 <Layout><Dashboard /></Layout>
+                            </ProtectedRoute>
+                        } />
+                        <Route path="/professional" element={
+                            <ProtectedRoute>
+                                <Layout><ProfessionalDashboard /></Layout>
+                            </ProtectedRoute>
+                        } />
+                        <Route path="/client" element={
+                            <ProtectedRoute>
+                                <Layout><ClientDashboard /></Layout>
                             </ProtectedRoute>
                         } />
                         <Route path="/agenda" element={

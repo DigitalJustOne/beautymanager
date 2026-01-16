@@ -30,8 +30,19 @@ const Login: React.FC = () => {
                     password,
                 });
                 if (error) throw error;
-                // Navigation will be handled by AuthContext state change or manual here
-                navigate('/');
+
+                // Fetch profile to check role
+                const { data: { user } } = await supabase.auth.getUser();
+                if (user) {
+                    const { data: profile } = await supabase.from('profiles').select('role').eq('id', user.id).single();
+                    const role = profile?.role || 'client';
+
+                    if (role === 'admin') navigate('/');
+                    else if (role === 'professional') navigate('/professional');
+                    else navigate('/client');
+                } else {
+                    navigate('/');
+                }
             }
         } catch (err: any) {
             setError(err.message || 'Error de autenticación');
