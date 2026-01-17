@@ -1,5 +1,5 @@
 import React from 'react';
-import { HashRouter, Routes, Route, Navigate } from 'react-router-dom';
+import { HashRouter, Routes, Route, Navigate, useNavigate } from 'react-router-dom';
 import Layout from './components/Layout';
 import Dashboard from './pages/Dashboard';
 import Agenda from './pages/Agenda';
@@ -7,10 +7,13 @@ import Clients from './pages/Clients';
 import Team from './pages/Team';
 import Settings from './pages/Settings';
 import Login from './pages/Login';
+import ForgotPassword from './pages/ForgotPassword';
+import UpdatePassword from './pages/UpdatePassword';
 import ProfessionalDashboard from './pages/ProfessionalDashboard';
 import ClientDashboard from './pages/ClientDashboard';
 import { DataProvider } from './context/DataContext';
 import { AuthProvider, useAuth } from './context/AuthContext';
+import { supabase } from './services/supabase';
 
 const ProtectedRoute = ({ children, allowedRoles }: { children: React.ReactElement, allowedRoles?: string[] }) => {
     const { session, role, loading } = useAuth();
@@ -45,13 +48,29 @@ const ProtectedRoute = ({ children, allowedRoles }: { children: React.ReactEleme
     return children;
 };
 
+const AuthEventHandler = () => {
+    const navigate = useNavigate();
+    React.useEffect(() => {
+        const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+            if (event === 'PASSWORD_RECOVERY') {
+                navigate('/update-password');
+            }
+        });
+        return () => subscription.unsubscribe();
+    }, [navigate]);
+    return null;
+};
+
 const App: React.FC = () => {
     return (
         <AuthProvider>
             <DataProvider>
                 <HashRouter>
+                    <AuthEventHandler />
                     <Routes>
                         <Route path="/login" element={<Login />} />
+                        <Route path="/forgot-password" element={<ForgotPassword />} />
+                        <Route path="/update-password" element={<UpdatePassword />} />
                         <Route path="/" element={
                             <ProtectedRoute allowedRoles={['admin']}>
                                 <Layout><Dashboard /></Layout>

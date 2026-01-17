@@ -30,6 +30,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
         // Listen for auth state changes
         const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
+            clearTimeout(loadingTimeout);
             console.log("Auth Event:", event, session?.user?.email);
 
             setSession(session);
@@ -43,8 +44,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
                 setProfile(null);
                 setLoading(false);
             }
-
-            clearTimeout(loadingTimeout);
         });
 
         return () => {

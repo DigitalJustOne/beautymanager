@@ -144,8 +144,8 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
                     if (role === 'client' && !isOwn) {
                         return {
                             id: a.id,
-                            time: a.date ? new Date(a.date).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '',
-                            ampm: a.date ? (new Date(a.date).getHours() >= 12 ? 'PM' : 'AM') : '',
+                            time: a.time || (a.date ? new Date(a.date).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : ''),
+                            ampm: a.time ? (parseInt(a.time.split(':')[0]) >= 12 ? 'PM' : 'AM') : '',
                             client: 'Reservado', // Masked
                             service: 'Ocupado', // Masked
                             duration: a.duration_minutes ? `${Math.floor(a.duration_minutes / 60)}h ${a.duration_minutes % 60}m` : '0m',
@@ -160,8 +160,8 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
                     return {
                         id: a.id,
-                        time: a.date ? new Date(a.date).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '',
-                        ampm: a.date ? (new Date(a.date).getHours() >= 12 ? 'PM' : 'AM') : '',
+                        time: a.time || (a.date ? new Date(a.date).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : ''),
+                        ampm: a.time ? (parseInt(a.time.split(':')[0]) >= 12 ? 'PM' : 'AM') : '',
                         client: a.clients?.name || 'Desconocido',
                         service: a.service,
                         duration: a.duration_minutes ? `${Math.floor(a.duration_minutes / 60)}h ${a.duration_minutes % 60}m` : '0m',
@@ -220,12 +220,21 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
             if (newClient) finalClientId = newClient.id;
         }
 
+        // CORRECT TIME LOGIC: Combine Date + selected Time
+        let finalDateIso = appt.date?.toISOString();
+        if (appt.date && appt.time) {
+            const d = new Date(appt.date);
+            const [hours, minutes] = appt.time.split(':').map(Number);
+            d.setHours(hours, minutes, 0, 0); // Set correct time
+            finalDateIso = d.toISOString();
+        }
+
         const { data, error } = await supabase.from('appointments').insert({
             service: appt.service,
             client_id: finalClientId,
             professional_id: appt.professionalId,
             status: appt.status,
-            date: appt.date?.toISOString(),
+            date: finalDateIso, // Insert CORRECTED date (timestamp)
             time: appt.time, // IMPORTANT: Insert time string as DB expects
             duration: appt.duration, // Insert duration text
             duration_minutes: durationMinutes, // Insert numeric duration if column exists (optional but good)

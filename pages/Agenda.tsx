@@ -2,6 +2,7 @@ import React, { useState, useMemo, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useData } from '../context/DataContext';
 import { Appointment, Client } from '../types';
+import { generateGoogleCalendarUrl } from '../services/calendarService';
 
 type ViewMode = 'day' | 'week' | 'month';
 
@@ -24,6 +25,7 @@ const Agenda: React.FC = () => {
     const [clientEmail, setClientEmail] = useState('');
     const [service, setService] = useState('Semipermanente Manos');
     const [selectedProfessionalId, setSelectedProfessionalId] = useState<number | ''>('');
+    const [isSubmitting, setIsSubmitting] = useState(false);
     const [selectedDate, setSelectedDate] = useState<Date | null>(null);
     const [selectedTime, setSelectedTime] = useState<string | null>(null);
     const [formError, setFormError] = useState<string | null>(null);
@@ -375,92 +377,107 @@ const Agenda: React.FC = () => {
         // Validación Final de Conflicto (Doble chequeo)
         if (isSlotOccupied(selectedTime)) {
             const proName = professionals.find(p => p.id === Number(selectedProfessionalId))?.name;
-            setFormError(`El horario seleccionado (${selectedTime}) ya está ocupado para ${proName}.`);
+            setFormError(`El horario seleccionado (${selectedTime}) ya está ocupado para ${proName}. Por favor elige otro.`);
             return;
         }
 
-        // --- VALIDACIÓN ESTRICTA DE DUPLICADOS ---
-        if (!existingClient) {
-            const emailOwner = clients.find(c => c.email.toLowerCase() === clientEmail.toLowerCase());
-            if (emailOwner) {
-                setFormError(`El correo electrónico ya está registrado con el cliente "${emailOwner.name}". No se puede crear un nuevo registro.`);
-                return;
+        setIsSubmitting(true);
+
+        try {
+            // --- VALIDACIÓN ESTRICTA DE DUPLICADOS ---
+            if (!existingClient) {
+                const emailOwner = clients.find(c => c.email.toLowerCase() === clientEmail.toLowerCase());
+                if (emailOwner) {
+                    setFormError(`El correo electrónico ya está registrado con el cliente "${emailOwner.name}". No se puede crear un nuevo registro.`);
+                    setIsSubmitting(false);
+                    return;
+                }
+            } else {
+                const emailOwner = clients.find(c => c.email.toLowerCase() === clientEmail.toLowerCase());
+                if (emailOwner && emailOwner.id !== existingClient.id) {
+                    setFormError(`El correo ingresado pertenece a otro cliente (${emailOwner.name}). Por favor verifique.`);
+                    setIsSubmitting(false);
+                    return;
+                }
             }
-        } else {
-            const emailOwner = clients.find(c => c.email.toLowerCase() === clientEmail.toLowerCase());
-            if (emailOwner && emailOwner.id !== existingClient.id) {
-                setFormError(`El correo ingresado pertenece a otro cliente (${emailOwner.name}). Por favor verifique.`);
-                return;
+            // ----------------------------------------
+
+            const avatarUrl = existingClient ? existingClient.avatar : `https://ui-avatars.com/api/?name=${encodeURIComponent(clientName)}&background=random`;
+            const selectedPro = professionals.find(p => p.id === Number(selectedProfessionalId));
+
+            // 1. Verificar/Crear Cliente
+            let finalClientName = clientName;
+            let finalClientId = existingClient?.id;
+
+            if (!existingClient) {
+                const newClient = await addClient({
+                    id: Date.now(),
+                    name: clientName,
+                    email: clientEmail,
+                    phone: clientPhone,
+                    lastVisit: 'Nuevo',
+                    avatar: avatarUrl,
+                    isNew: true
+                });
+                if (newClient) finalClientId = newClient.id;
+            } else {
+                finalClientName = existingClient.name;
             }
-        }
-        // ----------------------------------------
 
-        const avatarUrl = existingClient ? existingClient.avatar : `https://ui-avatars.com/api/?name=${encodeURIComponent(clientName)}&background=random`;
-        const selectedPro = professionals.find(p => p.id === Number(selectedProfessionalId));
+            const finalDurationString = formatDuration(currentDurationMinutes);
+            const finalPriceString = formatPrice(currentTotalPrice);
 
-        // 1. Verificar/Crear Cliente
-        let finalClientName = clientName;
-        let finalClientId = existingClient?.id;
+            // Construir string de servicio con el retiro específico
+            let serviceString = service;
+            if (removalType === 'semi') serviceString += ' + Retiro Semi';
+            if (removalType === 'acrylic') serviceString += ' + Retiro Acrílico';
+            if (removalType === 'feet') serviceString += ' + Retiro Pies';
 
-        if (!existingClient) {
-            const newClient = await addClient({
-                id: Date.now(),
-                name: clientName,
-                email: clientEmail,
-                phone: clientPhone,
-                lastVisit: 'Nuevo',
+            // 2. Crear Cita
+            const newAppt: Appointment = {
+                id: Date.now() + 1,
+                time: selectedTime,
+                ampm: parseInt(selectedTime.split(':')[0]) >= 12 ? 'PM' : 'AM',
+                client: finalClientName,
+                clientId: finalClientId,
+                service: serviceString,
+                duration: finalDurationString,
+                price: finalPriceString,
                 avatar: avatarUrl,
-                isNew: true
-            });
-            if (newClient) finalClientId = newClient.id;
-        } else {
-            finalClientName = existingClient.name;
+                status: 'pending',
+                date: selectedDate,
+                professionalId: selectedPro?.id,
+                professionalName: selectedPro?.name
+            };
+
+            await addAppointment(newAppt);
+
+            // Preguntar si desea sincronizar con Google Calendar
+            if (window.confirm(`¡Solicitud registrada!\nTotal a pagar: ${finalPriceString}\n\n¿Deseas agregar este evento a Google Calendar ahora?`)) {
+                const calendarUrl = generateGoogleCalendarUrl(newAppt);
+                if (calendarUrl) {
+                    window.open(calendarUrl, '_blank');
+                }
+            } else {
+                alert(`Cita registrada correctamente.`);
+            }
+
+            // Reset
+            setIsModalOpen(false);
+            setClientName('');
+            setClientPhone('');
+            setClientEmail('');
+            setService('Semipermanente Manos');
+            setRemovalType(''); // Reset retiro
+            setSelectedProfessionalId('');
+            setSelectedDate(null);
+            setSelectedTime(null);
+        } catch (error) {
+            console.error("Error creating appointment:", error);
+            setFormError("Ocurrió un error al crear la cita.");
+        } finally {
+            setIsSubmitting(false);
         }
-
-        const finalDurationString = formatDuration(currentDurationMinutes);
-        const finalPriceString = formatPrice(currentTotalPrice);
-
-        // Construir string de servicio con el retiro específico
-        let serviceString = service;
-        if (removalType === 'semi') serviceString += ' + Retiro Semi';
-        if (removalType === 'acrylic') serviceString += ' + Retiro Acrílico';
-        if (removalType === 'feet') serviceString += ' + Retiro Pies';
-
-        // 2. Crear Cita
-        const newAppt: Appointment = {
-            id: Date.now() + 1,
-            time: selectedTime,
-            ampm: parseInt(selectedTime.split(':')[0]) >= 12 ? 'PM' : 'AM',
-            client: finalClientName,
-            clientId: finalClientId,
-            service: serviceString,
-            duration: finalDurationString,
-            price: finalPriceString, // GUARDAR PRECIO
-            avatar: avatarUrl,
-            status: 'pending', // AHORA ES PENDIENTE POR DEFECTO
-            date: selectedDate,
-            professionalId: selectedPro?.id,
-            professionalName: selectedPro?.name
-        };
-
-        addAppointment(newAppt);
-
-        alert(
-            `¡Solicitud registrada!\n` +
-            `Profesional: ${selectedPro?.name}\n` +
-            `Servicio: ${service}\n` +
-            (removalType ? `+ Retiro incluido\n` : '') +
-            `Total a pagar: ${finalPriceString}\n` +
-            `Duración total: ${finalDurationString}\n\n` +
-            `La cita ha quedado en estado PENDIENTE. Podrás confirmarla desde el panel principal.`
-        );
-
-        // Reset
-        setIsModalOpen(false);
-        setClientName(''); setClientPhone(''); setClientEmail('');
-        setRemovalType('');
-        setSelectedProfessionalId('');
-        setSelectedDate(null); setSelectedTime(null);
     };
 
     // --- RENDERIZADO DE COMPONENTES ---
@@ -814,21 +831,32 @@ const Agenda: React.FC = () => {
                                 </div>
                             </div>
 
-                            {/* Botones de Acción (Solo si no está completado/cancelado) */}
-                            {(() => {
-                                const status = getAppointmentStatus(selectedAppointment);
-                                if (status.label !== 'Completado' && status.label !== 'Cancelado') {
-                                    return (
-                                        <div className="flex gap-2 mb-4 justify-center">
-                                            {status.label === 'Pendiente' && (
-                                                <button onClick={() => { updateAppointmentStatus(selectedAppointment.id, 'confirmed'); setSelectedAppointment(null); }} className="text-xs px-4 py-2 bg-green-100 text-green-700 rounded-lg hover:bg-green-200 font-bold">Confirmar</button>
-                                            )}
-                                            <button onClick={() => { deleteAppointment(selectedAppointment.id); setSelectedAppointment(null); }} className="text-xs px-4 py-2 bg-red-100 text-red-700 rounded-lg hover:bg-red-200 font-bold">Cancelar</button>
-                                        </div>
-                                    );
-                                }
-                                return null;
-                            })()}
+                            {/* ACTION BUTTONS (Unified Design) */}
+                            <div className="flex gap-3 mb-4">
+                                {getAppointmentStatus(selectedAppointment).label === 'Pendiente' && (
+                                    <button
+                                        onClick={() => { updateAppointmentStatus(selectedAppointment.id, 'confirmed'); setSelectedAppointment(null); }}
+                                        className="flex-1 py-2.5 bg-green-100 text-green-700 hover:bg-green-200 rounded-xl font-bold text-sm transition-colors flex items-center justify-center gap-1"
+                                    >
+                                        <span className="material-symbols-outlined text-[18px]">check</span>
+                                        Confirmar
+                                    </button>
+                                )}
+                                {(getAppointmentStatus(selectedAppointment).label === 'Pendiente' || getAppointmentStatus(selectedAppointment).label === 'Confirmado') && (
+                                    <button
+                                        onClick={() => {
+                                            if (window.confirm('¿Estás seguro de cancelar esta cita?')) {
+                                                deleteAppointment(selectedAppointment.id);
+                                                setSelectedAppointment(null);
+                                            }
+                                        }}
+                                        className="flex-1 py-2.5 bg-red-100 text-red-700 hover:bg-red-200 rounded-xl font-bold text-sm transition-colors flex items-center justify-center gap-1"
+                                    >
+                                        <span className="material-symbols-outlined text-[18px]">cancel</span>
+                                        Cancelar
+                                    </button>
+                                )}
+                            </div>
 
                             {(() => {
                                 const client = getClientInfo(selectedAppointment.client);
@@ -1146,17 +1174,27 @@ const Agenda: React.FC = () => {
                                 <button
                                     type="button"
                                     onClick={() => setIsModalOpen(false)}
-                                    className="flex-1 py-3 rounded-xl font-bold text-text-sec-light dark:text-text-sec-dark hover:bg-background-light dark:hover:bg-background-dark transition-colors"
+                                    disabled={isSubmitting}
+                                    className="flex-1 py-3 rounded-xl font-bold text-text-sec-light dark:text-text-sec-dark hover:bg-background-light dark:hover:bg-background-dark transition-colors disabled:opacity-50"
                                 >
                                     Cancelar
                                 </button>
                                 <button
                                     type="submit"
-                                    disabled={!selectedDate || !selectedTime || !clientName || !clientEmail || clientPhone.length < 10 || !selectedProfessionalId}
+                                    disabled={!selectedDate || !selectedTime || !clientName || !clientEmail || clientPhone.length < 10 || !selectedProfessionalId || isSubmitting}
                                     className="flex-1 py-3 rounded-xl bg-primary text-white font-bold hover:bg-primary/90 transition-colors shadow-lg shadow-primary/20 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
                                 >
-                                    <span className="material-symbols-outlined text-[20px]">send</span>
-                                    Agendar y Enviar
+                                    {isSubmitting ? (
+                                        <>
+                                            <span className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></span>
+                                            <span>Procesando...</span>
+                                        </>
+                                    ) : (
+                                        <>
+                                            <span className="material-symbols-outlined text-[20px]">send</span>
+                                            <span>Agendar y Enviar</span>
+                                        </>
+                                    )}
                                 </button>
                             </div>
                         </form>

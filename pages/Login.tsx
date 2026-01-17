@@ -1,7 +1,7 @@
 
 import React, { useState } from 'react';
 import { supabase } from '../services/supabase';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 
 const Login: React.FC = () => {
@@ -114,6 +114,15 @@ const Login: React.FC = () => {
                             required
                             minLength={6}
                         />
+                    </div>
+
+                    <div className="flex justify-end">
+                        <Link
+                            to="/forgot-password"
+                            className="text-sm font-medium text-primary hover:text-primary/80 transition-colors"
+                        >
+                            ¿Olvidaste tu contraseña?
+                        </Link>
                     </div>
 
                     <button
