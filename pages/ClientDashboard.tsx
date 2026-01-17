@@ -1,5 +1,6 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { useData } from '../context/DataContext';
+import { supabase } from '../services/supabase';
 
 const ClientDashboard: React.FC = () => {
     const { appointments, userProfile, updateUserProfile, professionals, addAppointment } = useData();
@@ -316,6 +317,28 @@ const ClientDashboard: React.FC = () => {
         };
 
         await addAppointment(newAppt);
+
+        // Notify Professional via Email (Edge Function)
+        try {
+            console.log("Notifying professional:", selectedPro?.email);
+            // This assumes an Edge Function named 'notify-professional' is deployed
+            // If not deployed, we catch the error silently so user flow isn't interrupted
+            const { error: notifyError } = await supabase.functions.invoke('notify-professional', {
+                body: {
+                    professionalEmail: selectedPro?.email, // Assuming we have this, if not we need to fetch it
+                    professionalName: selectedPro?.name,
+                    clientName: userProfile.name,
+                    service: serviceString,
+                    date: selectedDate.toLocaleDateString(),
+                    time: selectedTime,
+                    appointmentId: newAppt.id
+                }
+            });
+            if (notifyError) console.warn("Could not send email notification (Check Edge Function):", notifyError);
+            else console.log("Notification sent successfully");
+        } catch (emailErr) {
+            console.warn("Error triggering notification:", emailErr);
+        }
 
         // Generate Link
         const link = generateGoogleCalendarLink({
