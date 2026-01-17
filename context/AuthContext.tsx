@@ -22,38 +22,76 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const [loading, setLoading] = useState(true);
 
     useEffect(() => {
-        // Set a timeout to prevent infinite loading state
-        const loadingTimeout = setTimeout(() => {
-            console.log("Auth loading timeout - forcing loading to false");
-            setLoading(false);
-        }, 10000); // 10 second max wait
+        // Initial session check
+        const initializeAuth = async () => {
+            try {
+                const { data: { session } } = await supabase.auth.getSession();
+                console.log("Initial session check:", session?.user?.email);
 
-        // Listen for auth state changes
+                if (session?.user) {
+                    setSession(session);
+                    setUser(session.user);
+                    // Fetch profile immediately for initial load
+                    await fetchProfile(session.user.id, session.user.email || '');
+                } else {
+                    setLoading(false);
+                }
+            } catch (error) {
+                console.error("Error checking initial session:", error);
+                setLoading(false);
+            }
+        };
+
+        initializeAuth();
+
         const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
-            clearTimeout(loadingTimeout);
             console.log("Auth Event:", event, session?.user?.email);
+
+            if (event === 'SIGNED_OUT') {
+                setSession(null);
+                setUser(null);
+                setRole(null);
+                setProfile(null);
+                setLoading(false);
+                return;
+            }
 
             setSession(session);
             setUser(session?.user ?? null);
 
             if (session?.user) {
-                // Pass user email directly to avoid race conditions
-                await fetchProfile(session.user.id, session.user.email || '');
+                // If it's a TOKEN_REFRESHED event, we probably already have the profile. 
+                // Only fetch if we don't have it or if the user changed.
+                const isTokenRefresh = event === 'TOKEN_REFRESHED';
+                const alreadyLoaded = profile && profile.id === session.user.id;
+
+                if (isTokenRefresh && alreadyLoaded) {
+                    // Do nothing, just updated session token
+                    console.log("Token refreshed, profile already loaded. Skipping fetch.");
+                    return;
+                }
+
+                // If it's SIGNED_IN or other events, fetch profile.
+                // Pass false for showLoading if it's a refresh or if we want to be subtle.
+                // However, on SIGNED_IN we usually want to show loading to ensure Role is ready.
+                // On INITIAL_SESSION (which we handled manually above), we want loading.
+                // If the event arrives LATER for some reason, we handle it too.
+
+                const shouldShowLoading = !alreadyLoaded && event !== 'TOKEN_REFRESHED';
+                await fetchProfile(session.user.id, session.user.email || '', shouldShowLoading);
             } else {
-                setRole(null);
-                setProfile(null);
                 setLoading(false);
             }
         });
 
         return () => {
             subscription.unsubscribe();
-            clearTimeout(loadingTimeout);
         };
-    }, []);
+    }, []); // Removed profile dependency to avoid loops, though it wasn't there before.
 
-    const fetchProfile = async (userId: string, userEmail: string) => {
-        setLoading(true);
+    const fetchProfile = async (userId: string, userEmail: string, showLoading = true) => {
+        if (showLoading) setLoading(true);
+
         try {
             const { data, error } = await supabase
                 .from('profiles')
@@ -143,7 +181,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             setRole(null);
             setProfile(null);
         } finally {
-            setLoading(false);
+            if (showLoading) setLoading(false);
         }
     };
 
