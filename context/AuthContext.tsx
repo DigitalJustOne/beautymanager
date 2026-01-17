@@ -22,6 +22,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const [loading, setLoading] = useState(true);
 
     useEffect(() => {
+        // SAFETY TIMEOUT: Force loading to false after 5 seconds to prevent infinite spinner
+        // This ensures the app "unblocks" even if Supabase or network is slow/stuck
+        const safetyTimeout = setTimeout(() => {
+            console.warn("Auth safety timeout reached - forcing app to load");
+            setLoading(false);
+        }, 5000);
+
         // Initial session check
         const initializeAuth = async () => {
             try {
@@ -85,6 +92,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         });
 
         return () => {
+            clearTimeout(safetyTimeout);
             subscription.unsubscribe();
         };
     }, []); // Removed profile dependency to avoid loops, though it wasn't there before.
