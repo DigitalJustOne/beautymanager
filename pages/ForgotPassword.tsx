@@ -18,7 +18,20 @@ const ForgotPassword: React.FC = () => {
             // Redirect to the current site URL. 
             // Supabase will append #access_token=... type=recovery etc.
             // The app's AuthEventHandler will detect 'PASSWORD_RECOVERY' and redirect to /update-password
-            const redirectTo = window.location.origin;
+            // Determine the best redirect URL
+            // Supabase Authentication > URL Configuration > Redirect URLs MUST include this URL
+            const getRedirectUrl = () => {
+                const origin = window.location.origin;
+                // If we are definitely on the production site, force the exact production URL
+                // to avoid any potential mismatches (though origin should be correct)
+                if (window.location.hostname.includes('hostingersite.com')) {
+                    return 'https://lightsalmon-koala-119277.hostingersite.com';
+                }
+                return origin;
+            };
+
+            const redirectTo = getRedirectUrl();
+            console.log("Sending password reset with redirect to:", redirectTo);
 
             const { error } = await supabase.auth.resetPasswordForEmail(email, {
                 redirectTo: redirectTo,
