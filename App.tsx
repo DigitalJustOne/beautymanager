@@ -35,13 +35,11 @@ const ProtectedRoute = ({ children, allowedRoles }: { children: React.ReactEleme
         if (role === 'client') return <Navigate to="/client" replace />;
     }
 
-    // If role is not loaded yet but we have session, wait a bit more
+    // If role is not loaded yet but we have session, it means profile fetch failed or is invalid
+    // Don't wait forever, redirect to login to force refresh/retry
     if (allowedRoles && !role) {
-        return (
-            <div className="flex items-center justify-center h-screen bg-background-light dark:bg-background-dark">
-                <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary"></div>
-            </div>
-        );
+        console.warn("Session active but no role found. Redirecting to login.");
+        return <Navigate to="/login" replace />;
     }
 
     return children;
