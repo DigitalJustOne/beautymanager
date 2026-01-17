@@ -178,17 +178,30 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
                 return;
             }
 
+
             if (event === 'INITIAL_SESSION') return;
+            if (event === 'TOKEN_REFRESHED') return; // Token refresh doesn't need profile reload
 
             if (newSession?.user) {
                 setSession(newSession);
                 setUser(newSession.user);
 
-                // Only show loading for new sign-ins
+                // For SIGNED_IN, check cache first then fetch
                 if (event === 'SIGNED_IN') {
-                    setLoading(true);
-                    await fetchProfile(newSession.user.id, newSession.user.email || '');
-                    setLoading(false);
+                    const cached = getCache();
+                    if (cached && cached.id === newSession.user.id && cached.role) {
+                        // Use cache for instant display
+                        setRole(cached.role);
+                        setProfile(cached);
+                        setLoading(false);
+                        // Refresh in background
+                        fetchProfile(newSession.user.id, newSession.user.email || '');
+                    } else {
+                        // No cache, show loading and fetch
+                        setLoading(true);
+                        await fetchProfile(newSession.user.id, newSession.user.email || '');
+                        setLoading(false);
+                    }
                 }
             }
         });

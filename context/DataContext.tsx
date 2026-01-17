@@ -45,7 +45,7 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         specialty: 'General',
         phone: '',
         email: '',
-        avatar: 'https://via.placeholder.com/150',
+        avatar: 'https://ui-avatars.com/api/?name=User&background=random',
         isGoogleCalendarConnected: false,
         schedule: defaultSchedule
     });
