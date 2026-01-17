@@ -20,25 +20,25 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const [role, setRole] = useState<string | null>(null);
     const [profile, setProfile] = useState<any>(null);
     const [loading, setLoading] = useState(true);
+    // Track if we successfully loaded the profile to avoid timeout interference
+    const profileLoadedRef = React.useRef(false);
 
     useEffect(() => {
-        // SAFETY TIMEOUT: Force loading to false after 5 seconds to prevent infinite spinner
-        // This ensures the app "unblocks" even if Supabase or network is slow/stuck
-        const safetyTimeout = setTimeout(() => {
-            console.warn("Auth safety timeout reached - forcing app to load");
-            // Failsafe: If we have a session but no role, assign a safe default 'client' role
-            // This prevents the user from being stuck in "No role found" limbo
-            setSession((currentSession) => {
-                if (currentSession && !role) {
-                    console.warn("Safety timeout: Assigning fallback role 'client'");
-                    setRole('client');
-                }
-                return currentSession;
-            });
-            setLoading(false);
-        }, 5000);
+        // Reset ref on mount
+        profileLoadedRef.current = false;
 
-        // Initial session check
+        // SAFETY TIMEOUT: Only stops the loading spinner, does NOT invent user data
+        // This prevents infinite loading but trusts that Supabase session is already persisted
+        const safetyTimeout = setTimeout(() => {
+            if (!profileLoadedRef.current) {
+                console.warn("Auth safety timeout reached - stopping spinner only");
+                // Just stop loading, don't assign fake roles or profiles
+                // Supabase session is already in localStorage, ProtectedRoute will handle redirect
+                setLoading(false);
+            }
+        }, 8000); // Extended to 8 seconds to give slow networks more time
+
+        // Initial session check - this reads from Supabase's localStorage cache
         const initializeAuth = async () => {
             try {
                 const { data: { session } } = await supabase.auth.getSession();
@@ -47,13 +47,16 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
                 if (session?.user) {
                     setSession(session);
                     setUser(session.user);
-                    // Fetch profile immediately for initial load
+                    // Fetch profile - this will set role from the REAL database
                     await fetchProfile(session.user.id, session.user.email || '');
+                    profileLoadedRef.current = true;
+                    clearTimeout(safetyTimeout); // Cancel timeout since we succeeded
                 } else {
                     setLoading(false);
                 }
             } catch (error) {
                 console.error("Error checking initial session:", error);
+                // On error, just stop loading - don't invent data
                 setLoading(false);
             }
         };
@@ -69,6 +72,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
                 setRole(null);
                 setProfile(null);
                 setLoading(false);
+                profileLoadedRef.current = false;
+                return;
+            }
+
+            // For INITIAL_SESSION event, we already handled it in initializeAuth
+            // Skip to avoid duplicate fetches
+            if (event === 'INITIAL_SESSION') {
                 return;
             }
 
@@ -76,25 +86,16 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             setUser(session?.user ?? null);
 
             if (session?.user) {
-                // If it's a TOKEN_REFRESHED event, we probably already have the profile. 
-                // Only fetch if we don't have it or if the user changed.
-                const isTokenRefresh = event === 'TOKEN_REFRESHED';
-                const alreadyLoaded = profile && profile.id === session.user.id;
-
-                if (isTokenRefresh && alreadyLoaded) {
-                    // Do nothing, just updated session token
-                    console.log("Token refreshed, profile already loaded. Skipping fetch.");
+                // Skip fetch if profile already loaded for this user (prevents reload issues)
+                if (profileLoadedRef.current && profile && profile.id === session.user.id) {
+                    console.log("Profile already loaded, skipping duplicate fetch");
                     return;
                 }
 
-                // If it's SIGNED_IN or other events, fetch profile.
-                // Pass false for showLoading if it's a refresh or if we want to be subtle.
-                // However, on SIGNED_IN we usually want to show loading to ensure Role is ready.
-                // On INITIAL_SESSION (which we handled manually above), we want loading.
-                // If the event arrives LATER for some reason, we handle it too.
-
-                const shouldShowLoading = !alreadyLoaded && event !== 'TOKEN_REFRESHED';
+                // For TOKEN_REFRESHED, don't show loading spinner
+                const shouldShowLoading = event !== 'TOKEN_REFRESHED';
                 await fetchProfile(session.user.id, session.user.email || '', shouldShowLoading);
+                profileLoadedRef.current = true;
             } else {
                 setLoading(false);
             }
@@ -104,7 +105,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             clearTimeout(safetyTimeout);
             subscription.unsubscribe();
         };
-    }, []); // Removed profile dependency to avoid loops, though it wasn't there before.
+    }, []);
 
     const fetchProfile = async (userId: string, userEmail: string, showLoading = true) => {
         if (showLoading) setLoading(true);
@@ -183,10 +184,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
                     setProfile(created);
                 }
             } else if (error) {
-                // Some other error occurred
+                // Some other error occurred - don't invent roles, let ProtectedRoute redirect
                 console.error("Error fetching profile:", error);
-                // Fallback to client role to avoid lockout
-                setRole('client');
+                setRole(null);
                 setProfile(null);
             } else if (data) {
                 console.log("Profile loaded:", data.role);
@@ -195,8 +195,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             }
         } catch (e) {
             console.error("fetchProfile exception", e);
-            // Ensure we don't leave user stuck - Fallback to client
-            setRole('client');
+            // On exception, don't invent roles - let ProtectedRoute handle redirect
+            setRole(null);
             setProfile(null);
         } finally {
             if (showLoading) setLoading(false);
