@@ -20,43 +20,83 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const [role, setRole] = useState<string | null>(null);
     const [profile, setProfile] = useState<any>(null);
     const [loading, setLoading] = useState(true);
-    // Track if we successfully loaded the profile to avoid timeout interference
     const profileLoadedRef = React.useRef(false);
 
+    // Helper to load cached profile from localStorage
+    const loadCachedProfile = (userId: string): any | null => {
+        try {
+            const cached = localStorage.getItem(`beautymanager_profile_${userId}`);
+            if (cached) {
+                return JSON.parse(cached);
+            }
+        } catch (e) {
+            console.warn("Error reading cached profile:", e);
+        }
+        return null;
+    };
+
+    // Helper to save profile to localStorage
+    const saveCachedProfile = (userId: string, profileData: any) => {
+        try {
+            localStorage.setItem(`beautymanager_profile_${userId}`, JSON.stringify(profileData));
+        } catch (e) {
+            console.warn("Error saving cached profile:", e);
+        }
+    };
+
+    // Helper to clear cached profile
+    const clearCachedProfile = (userId?: string) => {
+        try {
+            if (userId) {
+                localStorage.removeItem(`beautymanager_profile_${userId}`);
+            }
+            // Clear any profile keys
+            Object.keys(localStorage).forEach(key => {
+                if (key.startsWith('beautymanager_profile_')) {
+                    localStorage.removeItem(key);
+                }
+            });
+        } catch (e) {
+            console.warn("Error clearing cached profile:", e);
+        }
+    };
+
     useEffect(() => {
-        // Reset ref on mount
         profileLoadedRef.current = false;
 
-        // SAFETY TIMEOUT: Only stops the loading spinner, does NOT invent user data
-        // This prevents infinite loading but trusts that Supabase session is already persisted
-        const safetyTimeout = setTimeout(() => {
-            if (!profileLoadedRef.current) {
-                console.warn("Auth safety timeout reached - stopping spinner only");
-                // Just stop loading, don't assign fake roles or profiles
-                // Supabase session is already in localStorage, ProtectedRoute will handle redirect
-                setLoading(false);
-            }
-        }, 8000); // Extended to 8 seconds to give slow networks more time
-
-        // Initial session check - this reads from Supabase's localStorage cache
         const initializeAuth = async () => {
             try {
+                // Step 1: Get session from Supabase (this is fast, it reads from localStorage)
                 const { data: { session } } = await supabase.auth.getSession();
                 console.log("Initial session check:", session?.user?.email);
 
                 if (session?.user) {
                     setSession(session);
                     setUser(session.user);
-                    // Fetch profile - this will set role from the REAL database
-                    await fetchProfile(session.user.id, session.user.email || '');
-                    profileLoadedRef.current = true;
-                    clearTimeout(safetyTimeout); // Cancel timeout since we succeeded
+
+                    // Step 2: Try to load cached profile IMMEDIATELY (instant, no network)
+                    const cachedProfile = loadCachedProfile(session.user.id);
+                    if (cachedProfile && cachedProfile.id === session.user.id) {
+                        console.log("Using cached profile:", cachedProfile.role);
+                        setRole(cachedProfile.role);
+                        setProfile(cachedProfile);
+                        setLoading(false);
+                        profileLoadedRef.current = true;
+
+                        // Step 3: Refresh from database in background (silent, no loading spinner)
+                        fetchProfile(session.user.id, session.user.email || '', false);
+                    } else {
+                        // No cache, must wait for network
+                        console.log("No cached profile, fetching from database...");
+                        await fetchProfile(session.user.id, session.user.email || '', true);
+                        profileLoadedRef.current = true;
+                    }
                 } else {
+                    // No session
                     setLoading(false);
                 }
             } catch (error) {
                 console.error("Error checking initial session:", error);
-                // On error, just stop loading - don't invent data
                 setLoading(false);
             }
         };
@@ -67,6 +107,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             console.log("Auth Event:", event, session?.user?.email);
 
             if (event === 'SIGNED_OUT') {
+                clearCachedProfile();
                 setSession(null);
                 setUser(null);
                 setRole(null);
@@ -76,8 +117,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
                 return;
             }
 
-            // For INITIAL_SESSION event, we already handled it in initializeAuth
-            // Skip to avoid duplicate fetches
+            // Skip INITIAL_SESSION since we handled it in initializeAuth
             if (event === 'INITIAL_SESSION') {
                 return;
             }
@@ -86,13 +126,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             setUser(session?.user ?? null);
 
             if (session?.user) {
-                // Skip fetch if profile already loaded for this user (prevents reload issues)
+                // Skip if already loaded for this user
                 if (profileLoadedRef.current && profile && profile.id === session.user.id) {
                     console.log("Profile already loaded, skipping duplicate fetch");
                     return;
                 }
 
-                // For TOKEN_REFRESHED, don't show loading spinner
                 const shouldShowLoading = event !== 'TOKEN_REFRESHED';
                 await fetchProfile(session.user.id, session.user.email || '', shouldShowLoading);
                 profileLoadedRef.current = true;
@@ -102,7 +141,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         });
 
         return () => {
-            clearTimeout(safetyTimeout);
             subscription.unsubscribe();
         };
     }, []);
@@ -182,6 +220,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
                     console.log("Profile created:", created.role);
                     setRole(created.role);
                     setProfile(created);
+                    saveCachedProfile(userId, created); // Cache for instant reload
                 }
             } else if (error) {
                 // Some other error occurred - don't invent roles, let ProtectedRoute redirect
@@ -192,6 +231,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
                 console.log("Profile loaded:", data.role);
                 setRole(data.role);
                 setProfile(data);
+                saveCachedProfile(userId, data); // Cache for instant reload
             }
         } catch (e) {
             console.error("fetchProfile exception", e);
