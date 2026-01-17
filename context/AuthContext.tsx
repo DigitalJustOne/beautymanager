@@ -26,6 +26,15 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         // This ensures the app "unblocks" even if Supabase or network is slow/stuck
         const safetyTimeout = setTimeout(() => {
             console.warn("Auth safety timeout reached - forcing app to load");
+            // Failsafe: If we have a session but no role, assign a safe default 'client' role
+            // This prevents the user from being stuck in "No role found" limbo
+            setSession((currentSession) => {
+                if (currentSession && !role) {
+                    console.warn("Safety timeout: Assigning fallback role 'client'");
+                    setRole('client');
+                }
+                return currentSession;
+            });
             setLoading(false);
         }, 5000);
 
@@ -176,7 +185,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             } else if (error) {
                 // Some other error occurred
                 console.error("Error fetching profile:", error);
-                setRole(null);
+                // Fallback to client role to avoid lockout
+                setRole('client');
                 setProfile(null);
             } else if (data) {
                 console.log("Profile loaded:", data.role);
@@ -185,8 +195,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             }
         } catch (e) {
             console.error("fetchProfile exception", e);
-            // Ensure we don't leave user stuck
-            setRole(null);
+            // Ensure we don't leave user stuck - Fallback to client
+            setRole('client');
             setProfile(null);
         } finally {
             if (showLoading) setLoading(false);
