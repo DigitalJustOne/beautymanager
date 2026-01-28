@@ -66,41 +66,23 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         }));
 
         const fetchData = async () => {
-
-            // 1. Fetch Clients (Admin only)
-            if (role === 'admin') {
-                const { data: clientsData } = await supabase.from('clients').select('*').order('created_at', { ascending: false });
-                if (clientsData) {
-                    setClients(clientsData.map((c: any) => ({
-                        id: c.id,
-                        name: c.name,
-                        email: c.email,
-                        phone: c.phone,
-                        avatar: c.avatar || c.avatar_url || `https://ui-avatars.com/api/?name=${encodeURIComponent(c.name)}&background=random`,
-                        lastVisit: c.last_visit ? new Date(c.last_visit).toLocaleDateString() : 'Nuevo',
-                        isNew: false
-                    })));
-                }
-            } else {
-                setClients([]);
-            }
-
-            // 2. Fetch Professionals (Visible to all, needed for booking and team view)
-            // Note provided requirement: "professional no puede ver ... citas de otros profesionales". 
-            // Does not explicitly forbid seeing the list of professionals (useful for identifying colleagues or booking appointments).
+            // 1. Fetch Professionals (Visible to all)
             const { data: prosData } = await supabase.from('professionals').select('*');
+            let mappedPros: Professional[] = [];
             if (prosData) {
-                setProfessionals(prosData.map((p: any) => ({
+                mappedPros = prosData.map((p: any) => ({
                     id: p.id,
                     name: p.name,
                     role: p.role,
                     avatar: p.avatar || p.avatar_url || `https://ui-avatars.com/api/?name=${encodeURIComponent(p.name)}&background=random`,
                     email: p.email,
-                    specialties: p.specialties || []
-                })));
+                    specialties: p.specialties || [],
+                    profileId: p.profile_id
+                }));
+                setProfessionals(mappedPros);
             }
 
-            // 3. Fetch Appointments (Role restricted)
+            // 2. Fetch Appointments (Role restricted)
             let apptsQuery = supabase.from('appointments').select(`
                 *,
                 clients (name, avatar),
@@ -108,34 +90,25 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
             `);
 
             let currentClientId: number | undefined;
+            let currentProId: number | undefined;
 
             if (role === 'professional') {
-                // Determine Professional ID by email
-                const { data: myPro } = await supabase.from('professionals').select('id').eq('email', session.user.email).limit(1).single();
+                const myPro = mappedPros.find(p => p.email === session.user.email);
                 if (myPro) {
+                    currentProId = myPro.id;
                     apptsQuery = apptsQuery.eq('professional_id', myPro.id);
                 } else {
-                    apptsQuery = apptsQuery.eq('id', -1); // Block access if not linked
+                    apptsQuery = apptsQuery.eq('id', -1);
                 }
             } else if (role === 'client') {
-                // Determine Client ID by email to identify "own" appointments
                 const { data: myClient } = await supabase.from('clients').select('id').eq('email', session.user.email).limit(1).single();
-                if (myClient) {
-                    currentClientId = myClient.id;
-                    // Clients need ALL appointments to check availability, but must be anonymized.
-                    // So we DO NOT filter by client_id in the query.
-                } else {
-                    // If client not found (e.g. new user), they see nothing or all?
-                    // They need to see availability to book. So allow all.
-                    // But strictly anonymized.
-                }
+                if (myClient) currentClientId = myClient.id;
             }
 
             const { data: apptsData } = await apptsQuery;
 
             if (apptsData) {
                 setAppointments(apptsData.map((a: any) => {
-                    // Logic to anonymize for Client
                     let isOwn = true;
                     if (role === 'client') {
                         isOwn = currentClientId !== undefined && a.client_id === currentClientId;
@@ -146,15 +119,15 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
                             id: a.id,
                             time: a.time || (a.date ? new Date(a.date).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : ''),
                             ampm: a.time ? (parseInt(a.time.split(':')[0]) >= 12 ? 'PM' : 'AM') : '',
-                            client: 'Reservado', // Masked
-                            service: 'Ocupado', // Masked
+                            client: 'Reservado',
+                            service: 'Ocupado',
                             duration: a.duration_minutes ? `${Math.floor(a.duration_minutes / 60)}h ${a.duration_minutes % 60}m` : '0m',
-                            avatar: 'https://ui-avatars.com/api/?name=X&background=dddddd', // Masked
-                            status: a.status, // Preserve status so cancelled apps don't block slots
+                            avatar: 'https://ui-avatars.com/api/?name=X&background=dddddd',
+                            status: a.status,
                             date: new Date(a.date),
                             professionalId: a.professional_id,
                             professionalName: a.professionals?.name,
-                            price: undefined // Hide price
+                            price: undefined
                         };
                     }
 
@@ -173,6 +146,48 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
                         price: a.price ? `$${a.price}` : undefined
                     };
                 }));
+            }
+
+            // 3. Fetch Clients (Admin or Professional)
+            if (role === 'admin') {
+                const { data: clientsData } = await supabase.from('clients').select('*').order('created_at', { ascending: false });
+                if (clientsData) {
+                    setClients(clientsData.map((c: any) => ({
+                        id: c.id,
+                        name: c.name,
+                        email: c.email,
+                        phone: c.phone,
+                        avatar: c.avatar || c.avatar_url || `https://ui-avatars.com/api/?name=${encodeURIComponent(c.name)}&background=random`,
+                        lastVisit: c.last_visit ? new Date(c.last_visit).toLocaleDateString() : 'Nuevo',
+                        isNew: false,
+                        role: c.role,
+                        profileId: c.profile_id
+                    })));
+                }
+            } else if (role === 'professional' && currentProId) {
+                // Fetch clients who have appointments with this professional
+                const { data: proClients } = await supabase
+                    .from('clients')
+                    .select('*, appointments!inner(professional_id)')
+                    .eq('appointments.professional_id', currentProId);
+
+                if (proClients) {
+                    // Unique clients
+                    const uniqueClients = Array.from(new Map(proClients.map((c: any) => [c.id, c])).values());
+                    setClients(uniqueClients.map((c: any) => ({
+                        id: c.id,
+                        name: c.name,
+                        email: c.email,
+                        phone: c.phone,
+                        avatar: c.avatar || c.avatar_url || `https://ui-avatars.com/api/?name=${encodeURIComponent(c.name)}&background=random`,
+                        lastVisit: c.last_visit ? new Date(c.last_visit).toLocaleDateString() : 'Nuevo',
+                        isNew: false,
+                        role: c.role,
+                        profileId: c.profile_id
+                    })));
+                }
+            } else {
+                setClients([]);
             }
         };
 
@@ -303,7 +318,27 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         if (error) {
             console.error('Error updating profile:', error);
         } else {
+            // SYNC: Update clients/professionals table if linked
+            if (role === 'admin' || role === 'professional') {
+                await supabase.from('professionals').update({
+                    name: data.name,
+                    avatar: data.avatar,
+                    role: data.role
+                }).eq('profile_id', session.user.id);
+            }
+            if (role === 'client') {
+                await supabase.from('clients').update({
+                    name: data.name,
+                    avatar: data.avatar,
+                    phone: data.phone,
+                    role: data.role
+                }).eq('profile_id', session.user.id);
+            }
+
             setUserProfile(prev => ({ ...prev, ...data }));
+
+            // Refetch current data to update lists
+            // (Simple way: just update local state if we want to be fast, but DB sync already done)
         }
     };
 
@@ -336,6 +371,16 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
             specialties: data.specialties
         }).eq('id', id);
 
+        // SYNC: Update profile if connected
+        const targetPro = professionals.find(p => p.id === id);
+        if (targetPro?.profileId) {
+            await supabase.from('profiles').update({
+                full_name: data.name,
+                avatar_url: data.avatar,
+                role: data.role
+            }).eq('id', targetPro.profileId);
+        }
+
         setProfessionals(prev => prev.map(p => p.id === id ? { ...p, ...data } : p));
     };
 
@@ -357,6 +402,16 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
             console.error("Error updating client:", error);
             alert("Error al actualizar cliente: " + error.message);
         } else {
+            // SYNC: Update profile if connected
+            const targetClient = clients.find(c => c.id === id);
+            if (targetClient?.profileId) {
+                await supabase.from('profiles').update({
+                    full_name: data.name,
+                    avatar_url: data.avatar,
+                    phone: data.phone,
+                    role: data.role
+                }).eq('id', targetClient.profileId);
+            }
             setClients(prev => prev.map(c => c.id === id ? { ...c, ...data } : c));
         }
     };

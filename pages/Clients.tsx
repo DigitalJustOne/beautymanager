@@ -1,9 +1,10 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import { useData } from '../context/DataContext';
 import { Client, Appointment } from '../types';
 
 const Clients: React.FC = () => {
-    const { clients, appointments, addClient, updateClient, deleteClient } = useData();
+    const { clients, appointments, addClient, updateClient, deleteClient, userProfile } = useData();
+    const isAdmin = userProfile.role === 'admin';
 
     // Estados para Modales
     const [isClientModalOpen, setIsClientModalOpen] = useState(false);
@@ -19,7 +20,9 @@ const Clients: React.FC = () => {
     const [clientEmail, setClientEmail] = useState('');
     const [clientRole, setClientRole] = useState('client');
     const [clientPassword, setClientPassword] = useState('');
+    const [clientAvatar, setClientAvatar] = useState('');
     const [formError, setFormError] = useState<string | null>(null);
+    const fileInputRef = useRef<HTMLInputElement>(null);
 
     // Estados para Búsqueda y Paginación
     const [searchTerm, setSearchTerm] = useState('');
@@ -61,9 +64,21 @@ const Clients: React.FC = () => {
         setClientEmail('');
         setClientRole('client');
         setClientPassword('');
+        setClientAvatar('');
         setFormError(null);
         setIsEditing(false);
         setEditingClientId(null);
+    };
+
+    const handlePhotoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0];
+        if (file) {
+            const reader = new FileReader();
+            reader.onloadend = () => {
+                setClientAvatar(reader.result as string);
+            };
+            reader.readAsDataURL(file);
+        }
     };
 
     const openModal = (client?: Client) => {
@@ -75,6 +90,7 @@ const Clients: React.FC = () => {
             setClientEmail(client.email);
             setClientPhone(client.phone);
             setClientRole(client.role || 'client');
+            setClientAvatar(client.avatar);
         }
         setIsClientModalOpen(true);
     };
@@ -99,7 +115,7 @@ const Clients: React.FC = () => {
             return;
         }
 
-        const avatarUrl = `https://ui-avatars.com/api/?name=${encodeURIComponent(clientName)}&background=random`;
+        const avatarUrl = clientAvatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(clientName)}&background=random`;
 
         if (isEditing && editingClientId) {
             // EDITAR
@@ -110,7 +126,6 @@ const Clients: React.FC = () => {
                 role: clientRole,
                 avatar: avatarUrl
             });
-            // Nota: No actualizamos avatar si no cambió el nombre, pero ui-avatars depende del nombre.
         } else {
             // CREAR
             await addClient({
@@ -187,8 +202,16 @@ const Clients: React.FC = () => {
     const getClientHistory = (clientName: string): Appointment[] => {
         return appointments.filter(appt => appt.client.toLowerCase() === clientName.toLowerCase())
             .sort((a, b) => {
-                if (a.date && b.date) return b.date.getTime() - a.date.getTime();
-                return b.id - a.id;
+                const dateA = new Date(a.date || 0);
+                const dateB = new Date(b.date || 0);
+                const dateDiff = dateB.getTime() - dateA.getTime();
+
+                if (dateDiff !== 0) return dateDiff;
+
+                // Mismo día -> ordenar por hora descendente
+                const [aH, aM] = a.time.split(':').map(Number);
+                const [bH, bM] = b.time.split(':').map(Number);
+                return (bH * 60 + bM) - (aH * 60 + aM);
             });
     };
 
@@ -279,13 +302,15 @@ const Clients: React.FC = () => {
                                                 >
                                                     <span className="material-symbols-outlined text-[20px]">edit</span>
                                                 </button>
-                                                <button
-                                                    onClick={() => handleDeleteClient(client)}
-                                                    className="bg-red-50 text-red-600 dark:bg-red-900/20 dark:text-red-400 hover:bg-red-100 rounded-full p-2 transition-colors"
-                                                    title="Eliminar Cliente"
-                                                >
-                                                    <span className="material-symbols-outlined text-[20px]">delete</span>
-                                                </button>
+                                                {isAdmin && (
+                                                    <button
+                                                        onClick={() => handleDeleteClient(client)}
+                                                        className="bg-red-50 text-red-600 dark:bg-red-900/20 dark:text-red-400 hover:bg-red-100 rounded-full p-2 transition-colors"
+                                                        title="Eliminar Cliente"
+                                                    >
+                                                        <span className="material-symbols-outlined text-[20px]">delete</span>
+                                                    </button>
+                                                )}
                                             </div>
                                         </td>
                                     </tr>
@@ -333,7 +358,7 @@ const Clients: React.FC = () => {
             {/* --- MODAL FORMULARIO CLIENTE --- */}
             {isClientModalOpen && (
                 <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4 animate-in fade-in duration-200" onClick={(e) => e.stopPropagation()}>
-                    <div className="bg-card-light dark:bg-card-dark rounded-2xl shadow-2xl w-full max-w-lg overflow-hidden border border-border-light dark:border-border-dark animate-in zoom-in-95 duration-200 flex flex-col">
+                    <div className="bg-card-light dark:bg-card-dark rounded-2xl shadow-2xl w-full max-w-lg overflow-hidden border border-border-light dark:border-border-dark animate-in zoom-in-95 duration-200 flex flex-col max-h-[90vh]">
                         <div className="p-4 border-b border-border-light dark:border-border-dark flex justify-between items-center bg-primary text-white shrink-0">
                             <div className="flex items-center gap-2">
                                 <span className="material-symbols-outlined">{isEditing ? 'edit' : 'person_add'}</span>
@@ -341,7 +366,43 @@ const Clients: React.FC = () => {
                             </div>
                             <button onClick={() => setIsClientModalOpen(false)} className="hover:bg-white/20 rounded-full p-1 transition-colors"><span className="material-symbols-outlined">close</span></button>
                         </div>
-                        <form onSubmit={handleSaveClient} className="p-6 flex flex-col gap-5">
+                        <form onSubmit={handleSaveClient} className="p-6 flex flex-col gap-5 overflow-y-auto">
+                            {/* Avatar Edit Section */}
+                            <div className="flex flex-col items-center gap-3 mb-2">
+                                <div
+                                    className="relative group cursor-pointer"
+                                    onClick={() => fileInputRef.current?.click()}
+                                >
+                                    <div
+                                        className="size-24 rounded-full bg-cover bg-center border-4 border-white dark:border-slate-800 shadow-md bg-gray-100 dark:bg-slate-700"
+                                        style={{ backgroundImage: clientAvatar ? `url("${clientAvatar}")` : 'none' }}
+                                    >
+                                        {!clientAvatar && (
+                                            <div className="size-full flex items-center justify-center text-gray-400">
+                                                <span className="material-symbols-outlined text-4xl">person</span>
+                                            </div>
+                                        )}
+                                    </div>
+                                    <div className="absolute inset-0 bg-black/40 rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+                                        <span className="material-symbols-outlined text-white">camera_alt</span>
+                                    </div>
+                                    <input
+                                        type="file"
+                                        ref={fileInputRef}
+                                        onChange={handlePhotoUpload}
+                                        className="hidden"
+                                        accept="image/*"
+                                    />
+                                </div>
+                                <button
+                                    type="button"
+                                    onClick={() => fileInputRef.current?.click()}
+                                    className="text-xs font-bold text-primary hover:underline"
+                                >
+                                    Cambiar Foto
+                                </button>
+                            </div>
+
                             {formError && (
                                 <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 text-red-600 dark:text-red-400 p-3 rounded-xl flex items-center gap-3 animate-in fade-in slide-in-from-top-1">
                                     <span className="material-symbols-outlined fill">error</span>
@@ -434,8 +495,8 @@ const Clients: React.FC = () => {
                                 </button>
                             </div>
                         </form>
-                    </div >
-                </div >
+                    </div>
+                </div>
             )}
 
             {/* --- MODAL VER FICHA CLIENTE --- */}
@@ -510,7 +571,7 @@ const Clients: React.FC = () => {
                     </div>
                 </div>
             )}
-        </div >
+        </div>
     );
 };
 

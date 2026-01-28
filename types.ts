@@ -24,6 +24,7 @@ export interface Client {
     avatar: string;
     isNew?: boolean;
     role?: string;
+    profileId?: string; // ID vinculado al perfil de Supabase Auth
 }
 
 export interface Professional {
@@ -33,6 +34,7 @@ export interface Professional {
     avatar: string;
     email?: string; // Contacto / Login
     specialties: string[]; // Lista de servicios que puede realizar
+    profileId?: string; // ID vinculado al perfil de Supabase Auth
 }
 
 export interface ChatMessage {

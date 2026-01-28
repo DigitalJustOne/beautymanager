@@ -67,7 +67,7 @@ const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
                         <nav className="flex flex-col gap-2 flex-1 overflow-y-auto min-h-0 pt-4 pb-2">
                             {menuItems.filter(item => {
                                 if (userProfile.role === 'admin') return true;
-                                if (userProfile.role === 'professional') return ['Dashboard', 'Agenda', 'Ajustes'].includes(item.label);
+                                if (userProfile.role === 'professional') return ['Dashboard', 'Agenda', 'Clientes', 'Ajustes'].includes(item.label);
                                 if (userProfile.role === 'client') return ['Dashboard', 'Ajustes'].includes(item.label);
                                 return false; // Default hidden
                             }).map((item) => {
@@ -96,7 +96,7 @@ const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
                     </div>
 
                     {/* Logout */}
-                    <div className="pt-4 border-t border-border-light dark:border-border-dark mt-auto">
+                    <div className="pt-4 border-t border-border-light dark:border-border-dark mt-auto flex flex-col gap-4">
                         <button
                             onClick={handleLogout}
                             className="flex w-full items-center justify-center gap-2 rounded-full h-12 px-4 bg-transparent border border-border-light dark:border-border-dark text-text-sec-light dark:text-text-sec-dark hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-900/10 dark:hover:text-red-400 hover:border-red-200 dark:hover:border-red-800 transition-all cursor-pointer"
@@ -104,6 +104,9 @@ const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
                             <span className="material-symbols-outlined text-[20px]">logout</span>
                             <span className="text-sm font-bold">Cerrar Sesión</span>
                         </button>
+                        <div className="text-center">
+                            <span className="text-[10px] font-bold text-gray-300 dark:text-slate-600 uppercase tracking-widest">Version 1.1.2</span>
+                        </div>
                     </div>
                 </div>
             </aside>
@@ -129,7 +132,7 @@ const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
                         <nav className="flex flex-col gap-2">
                             {menuItems.filter(item => {
                                 if (userProfile.role === 'admin') return true;
-                                if (userProfile.role === 'professional') return ['Dashboard', 'Agenda', 'Ajustes'].includes(item.label);
+                                if (userProfile.role === 'professional') return ['Dashboard', 'Agenda', 'Clientes', 'Ajustes'].includes(item.label);
                                 if (userProfile.role === 'client') return ['Dashboard', 'Ajustes'].includes(item.label);
                                 return false;
                             }).map((item) => {
@@ -156,13 +159,18 @@ const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
                         </nav>
                     </div>
                     {/* Mobile Logout */}
-                    <button
-                        onClick={handleLogout}
-                        className="flex w-full items-center justify-center gap-2 rounded-full h-12 px-4 bg-transparent border border-border-light dark:border-border-dark text-text-sec-light dark:text-text-sec-dark hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-900/10 dark:hover:text-red-400 hover:border-red-200 dark:hover:border-red-800 transition-all cursor-pointer mt-4"
-                    >
-                        <span className="material-symbols-outlined text-[20px]">logout</span>
-                        <span className="text-sm font-bold">Cerrar Sesión</span>
-                    </button>
+                    <div className="mt-4 flex flex-col gap-4">
+                        <button
+                            onClick={handleLogout}
+                            className="flex w-full items-center justify-center gap-2 rounded-full h-12 px-4 bg-transparent border border-border-light dark:border-border-dark text-text-sec-light dark:text-text-sec-dark hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-900/10 dark:hover:text-red-400 hover:border-red-200 dark:hover:border-red-800 transition-all cursor-pointer"
+                        >
+                            <span className="material-symbols-outlined text-[20px]">logout</span>
+                            <span className="text-sm font-bold">Cerrar Sesión</span>
+                        </button>
+                        <div className="text-center">
+                            <span className="text-[10px] font-bold text-gray-400 dark:text-slate-600 uppercase tracking-widest">Version 1.1.2</span>
+                        </div>
+                    </div>
                 </div>
             </aside>
 

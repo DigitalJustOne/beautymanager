@@ -695,7 +695,13 @@ const Agenda: React.FC = () => {
                         if (!day) return <div key={idx} className="bg-slate-50/50 dark:bg-slate-800/20 rounded-lg"></div>;
 
                         const isToday = isSameDay(day, new Date());
-                        const dayAppts = appointments.filter(a => a.date && isSameDay(new Date(a.date), day));
+                        const dayAppts = appointments
+                            .filter(a => a.date && isSameDay(new Date(a.date), day))
+                            .sort((a, b) => {
+                                const [aH, aM] = a.time.split(':').map(Number);
+                                const [bH, bM] = b.time.split(':').map(Number);
+                                return (aH * 60 + aM) - (bH * 60 + bM);
+                            });
 
                         return (
                             <div key={idx} className={`border border-slate-100 dark:border-slate-800 rounded-lg p-2 flex flex-col gap-1 transition-colors hover:border-primary/50 ${isToday ? 'bg-blue-50/30 dark:bg-blue-900/10 ring-1 ring-primary' : 'bg-white dark:bg-card-dark'}`}>

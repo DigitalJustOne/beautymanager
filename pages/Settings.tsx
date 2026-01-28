@@ -1,5 +1,6 @@
 import React, { useState, useRef } from 'react';
 import { useData } from '../context/DataContext';
+import { supabase } from '../services/supabase';
 
 const Settings: React.FC = () => {
     const { userProfile, updateUserProfile } = useData();
@@ -18,6 +19,11 @@ const Settings: React.FC = () => {
         isGoogleCalendarConnected: userProfile.isGoogleCalendarConnected,
         schedule: userProfile.schedule
     });
+
+    // Password State
+    const [newPassword, setNewPassword] = useState('');
+    const [confirmPassword, setConfirmPassword] = useState('');
+    const [passwordMessage, setPasswordMessage] = useState<{ type: 'success' | 'error', text: string } | null>(null);
 
     const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
         const { name, value } = e.target;
@@ -53,6 +59,33 @@ const Settings: React.FC = () => {
 
     const toggleGoogleCalendar = () => {
         setFormData(prev => ({ ...prev, isGoogleCalendarConnected: !prev.isGoogleCalendarConnected }));
+    };
+
+    const handlePasswordUpdate = async () => {
+        setPasswordMessage(null);
+        if (!newPassword) return;
+
+        if (newPassword !== confirmPassword) {
+            setPasswordMessage({ type: 'error', text: 'Las contraseñas no coinciden.' });
+            return;
+        }
+
+        if (newPassword.length < 6) {
+            setPasswordMessage({ type: 'error', text: 'Mínimo 6 caracteres.' });
+            return;
+        }
+
+        try {
+            const { error } = await supabase.auth.updateUser({ password: newPassword });
+            if (error) throw error;
+            setPasswordMessage({ type: 'success', text: 'Contraseña actualizada.' });
+            setNewPassword('');
+            setConfirmPassword('');
+            setTimeout(() => setPasswordMessage(null), 3000);
+        } catch (err: any) {
+            console.error("Error updating password:", err);
+            setPasswordMessage({ type: 'error', text: 'Error al actualizar.' });
+        }
     };
 
     return (
@@ -173,6 +206,55 @@ const Settings: React.FC = () => {
                                         <><span className="material-symbols-outlined text-[16px]">link_off</span>Conectar</>
                                     )}
                                 </button>
+                            </div>
+                        </div>
+
+                        {/* Security / Password Section */}
+                        <div className="bg-white dark:bg-gray-900 rounded-xl p-6 shadow-sm border border-[#f0f3f4] dark:border-gray-800">
+                            <h3 className="text-lg font-bold mb-6 flex items-center gap-2">
+                                <span className="material-symbols-outlined text-primary">lock</span>
+                                Seguridad de la Cuenta
+                            </h3>
+                            <div className="flex flex-col gap-4 max-w-lg">
+                                <p className="text-sm text-[#617c89] dark:text-gray-400">Si iniciaste sesión con Google, puedes establecer una contraseña aquí para acceder desde otros dispositivos sin usar Google.</p>
+
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                    <label className="flex flex-col gap-2">
+                                        <span className="text-sm font-bold text-[#111618] dark:text-gray-200">Nueva Contraseña</span>
+                                        <input
+                                            value={newPassword}
+                                            onChange={(e) => setNewPassword(e.target.value)}
+                                            className="form-input w-full rounded-xl border border-[#dbe2e6] dark:border-gray-700 bg-[#f8fafc] dark:bg-gray-800 px-4 h-12 text-sm focus:border-primary focus:ring-primary dark:text-white"
+                                            type="password"
+                                            placeholder="••••••••"
+                                        />
+                                    </label>
+                                    <label className="flex flex-col gap-2">
+                                        <span className="text-sm font-bold text-[#111618] dark:text-gray-200">Confirmar Contraseña</span>
+                                        <div className="flex gap-2">
+                                            <input
+                                                value={confirmPassword}
+                                                onChange={(e) => setConfirmPassword(e.target.value)}
+                                                className="form-input w-full rounded-xl border border-[#dbe2e6] dark:border-gray-700 bg-[#f8fafc] dark:bg-gray-800 px-4 h-12 text-sm focus:border-primary focus:ring-primary dark:text-white"
+                                                type="password"
+                                                placeholder="••••••••"
+                                            />
+                                            <button
+                                                onClick={handlePasswordUpdate}
+                                                disabled={!newPassword}
+                                                className="bg-primary text-white rounded-xl px-4 font-bold disabled:opacity-50 hover:bg-primary/90 transition-colors"
+                                            >
+                                                Actualizar
+                                            </button>
+                                        </div>
+                                    </label>
+                                </div>
+                                {passwordMessage && (
+                                    <div className={`text-sm font-bold flex items-center gap-2 ${passwordMessage.type === 'success' ? 'text-green-600' : 'text-red-600'}`}>
+                                        <span className="material-symbols-outlined text-[18px]">{passwordMessage.type === 'success' ? 'check_circle' : 'error'}</span>
+                                        {passwordMessage.text}
+                                    </div>
+                                )}
                             </div>
                         </div>
                     </div>

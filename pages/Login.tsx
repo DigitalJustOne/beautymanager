@@ -91,6 +91,34 @@ const Login: React.FC = () => {
                 )}
 
                 <form onSubmit={handleAuth} className="space-y-4">
+                    {/* Google Login Button */}
+                    <button
+                        type="button"
+                        onClick={async () => {
+                            setFormLoading(true);
+                            const { error } = await supabase.auth.signInWithOAuth({
+                                provider: 'google',
+                                options: {
+                                    redirectTo: window.location.origin, // Redirect back to this app after Google login
+                                }
+                            });
+                            if (error) {
+                                setFormError(error.message);
+                                setFormLoading(false);
+                            }
+                        }}
+                        disabled={isButtonDisabled}
+                        className="w-full py-3 px-4 bg-white dark:bg-card-dark text-gray-700 dark:text-white font-bold rounded-xl border border-gray-300 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-800 transition-all flex items-center justify-center gap-3 mb-4"
+                    >
+                        <img src="https://upload.wikimedia.org/wikipedia/commons/c/c1/Google_%22G%22_logo.svg" alt="Google" className="w-5 h-5" />
+                        Continuar con Google
+                    </button>
+
+                    <div className="relative flex items-center justify-center my-6">
+                        <div className="border-t border-gray-200 dark:border-gray-700 w-full absolute"></div>
+                        <span className="bg-card-light dark:bg-card-dark px-3 text-xs text-text-sec-light dark:text-text-sec-dark font-medium relative z-10 uppercase">O continúa con email</span>
+                    </div>
+
                     <div>
                         <label className="block text-sm font-medium mb-1 text-text-sec-light dark:text-text-sec-dark">Email</label>
                         <input
@@ -134,13 +162,14 @@ const Login: React.FC = () => {
                     </button>
                 </form>
 
-                <div className="mt-8 text-center pt-6 border-t border-border-light dark:border-border-dark">
+                <div className="mt-8 text-center pt-6 border-t border-border-light dark:border-border-dark flex flex-col gap-4">
                     <button
                         onClick={() => setIsRegistering(!isRegistering)}
                         className="text-sm font-medium text-text-sec-light dark:text-text-sec-dark hover:text-primary transition-colors"
                     >
                         {isRegistering ? '¿Ya tienes cuenta? Inicia sesión' : '¿No tienes cuenta? Regístrate'}
                     </button>
+                    <span className="text-[10px] font-bold text-gray-300 dark:text-slate-600 uppercase tracking-widest">Version 1.1.2</span>
                 </div>
             </div>
         </div>

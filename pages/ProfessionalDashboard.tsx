@@ -427,11 +427,22 @@ const ProfessionalDashboard: React.FC = () => {
                 const apptDate = new Date(appt.date).getTime();
                 if (apptDate < todayStart || apptDate >= todayEnd) return false;
 
-                // Verificar que la cita no esté completada (hora ya pasada)
+                // Calcular hora de fin
                 const [hours, minutes] = appt.time.split(':').map(Number);
-                const apptDateTime = new Date(appt.date);
-                apptDateTime.setHours(hours, minutes, 0, 0);
-                if (now > apptDateTime) return false; // Ya pasó = completada
+                const startDateTime = new Date(appt.date);
+                startDateTime.setHours(hours, minutes, 0, 0);
+
+                let durationMinutes = 60;
+                const hMatch = appt.duration.match(/(\d+)h/);
+                const mMatch = appt.duration.match(/(\d+)m/);
+                if (hMatch) durationMinutes = parseInt(hMatch[1]) * 60;
+                if (mMatch) durationMinutes += parseInt(mMatch[1]);
+                else if (!hMatch && !mMatch) durationMinutes = 60;
+
+                const endDateTime = new Date(startDateTime.getTime() + durationMinutes * 60000);
+
+                // Si AHORA es mayor que el FIN, ya pasó. Si es menor, está activa o pendiente.
+                if (now >= endDateTime) return false;
 
                 return true;
             })
@@ -444,6 +455,7 @@ const ProfessionalDashboard: React.FC = () => {
     }, [appointments]);
 
     // Filtrar citas pasadas (completadas) o canceladas
+    // Filtrar citas pasadas (completadas) o canceladas
     const pastAppointments = useMemo(() => {
         const now = new Date();
 
@@ -452,21 +464,32 @@ const ProfessionalDashboard: React.FC = () => {
                 // Si está cancelada, incluirla
                 if (appt.status === 'cancelled') return true;
 
-                // Si no tiene fecha, ignorar (o incluir si queremos ver errores, pero mejor ignorar)
+                // Si no tiene fecha, ignorar
                 if (!appt.date) return false;
 
-                // Verificar si ya pasó la fecha/hora
+                // Verificar si ya pasó la fecha/hora DE FINALIZACIÓN
                 const [hours, minutes] = appt.time.split(':').map(Number);
-                const apptDateTime = new Date(appt.date);
-                apptDateTime.setHours(hours, minutes, 0, 0);
+                const startDateTime = new Date(appt.date);
+                startDateTime.setHours(hours, minutes, 0, 0);
 
-                // Si la fecha/hora es menor a ahora, es completada/pasada
-                return now > apptDateTime;
+                let durationMinutes = 60;
+                const hMatch = appt.duration.match(/(\d+)h/);
+                const mMatch = appt.duration.match(/(\d+)m/);
+                if (hMatch) durationMinutes = parseInt(hMatch[1]) * 60;
+                if (mMatch) durationMinutes += parseInt(mMatch[1]);
+                else if (!hMatch && !mMatch) durationMinutes = 60;
+
+                const endDateTime = new Date(startDateTime.getTime() + durationMinutes * 60000);
+
+                // Solo si YA TERMINÓ (now >= endDateTime) es historial
+                return now >= endDateTime;
             })
             .sort((a, b) => {
                 // Ordenar por fecha descendente (más recientes primero)
                 const dateA = new Date(a.date || 0);
                 const dateB = new Date(b.date || 0);
+
+                // Comparar fechas completas (timestamp)
                 if (dateA.getTime() !== dateB.getTime()) {
                     return dateB.getTime() - dateA.getTime();
                 }
@@ -476,7 +499,7 @@ const ProfessionalDashboard: React.FC = () => {
                 const [bH, bM] = b.time.split(':').map(Number);
                 return (bH * 60 + bM) - (aH * 60 + aM);
             })
-            .slice(0, 5); // Mostrar solo las últimas 5 para no saturar
+            .slice(0, 10); // Mostrar las últimas 10
     }, [appointments]);
 
     return (
@@ -715,12 +738,9 @@ const ProfessionalDashboard: React.FC = () => {
                                     </div>
                                     <div className="flex items-center gap-4 mt-2 sm:mt-0 w-full sm:w-auto justify-between sm:justify-end pl-[90px] sm:pl-0">
                                         <span className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wide
-                                            ${isCancelled
-                                                ? 'bg-red-100 text-red-600 dark:bg-red-900/30 dark:text-red-400'
-                                                : 'bg-gray-200 text-gray-600 dark:bg-gray-700 dark:text-gray-400'
-                                            }`}
+                                            ${status.color} bg-opacity-20`} // Adjust opacity so it doesn't clash
                                         >
-                                            {isCancelled ? 'Cancelado' : 'Completado'}
+                                            {status.label}
                                         </span>
                                         {/* Botón para eliminar del historial si se desea, o ver detalle */}
                                         <button
