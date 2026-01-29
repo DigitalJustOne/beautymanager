@@ -98,7 +98,7 @@ const Login: React.FC = () => {
                             try {
                                 setFormLoading(true);
                                 console.log("Iniciando OAuth con URL de redirección:", window.location.origin);
-                                
+
                                 const { data, error } = await supabase.auth.signInWithOAuth({
                                     provider: 'google',
                                     options: {
@@ -186,7 +186,7 @@ const Login: React.FC = () => {
                     >
                         {isRegistering ? '¿Ya tienes cuenta? Inicia sesión' : '¿No tienes cuenta? Regístrate'}
                     </button>
-                    <span className="text-[10px] font-bold text-gray-300 dark:text-slate-600 uppercase tracking-widest">Version 1.1.2</span>
+                    <span className="text-[10px] font-bold text-gray-300 dark:text-slate-600 uppercase tracking-widest">Version 1.1.3</span>
                 </div>
             </div>
         </div>

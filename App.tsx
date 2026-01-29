@@ -1,5 +1,5 @@
 import React from 'react';
-import { HashRouter, Routes, Route, Navigate, useNavigate } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, Navigate, useNavigate } from 'react-router-dom';
 import Layout from './components/Layout';
 import Dashboard from './pages/Dashboard';
 import Agenda from './pages/Agenda';
@@ -66,7 +66,7 @@ const App: React.FC = () => {
     return (
         <AuthProvider>
             <DataProvider>
-                <HashRouter>
+                <BrowserRouter>
                     <AuthEventHandler />
                     <Routes>
                         <Route path="/login" element={<Login />} />
@@ -113,7 +113,7 @@ const App: React.FC = () => {
                             </ProtectedRoute>
                         } />
                     </Routes>
-                </HashRouter>
+                </BrowserRouter>
             </DataProvider>
         </AuthProvider>
     );
