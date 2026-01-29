@@ -260,7 +260,14 @@ const BookingModal: React.FC<BookingModalProps> = ({
 
             await addAppointment(newAppt);
 
-            const gCalUrl = `https://www.google.com/calendar/render?action=TEMPLATE&text=${encodeURIComponent(newAppt.service)}&dates=${selectedDate.toISOString().replace(/-|:|\.\d\d\d/g, '')}/${selectedDate.toISOString().replace(/-|:|\.\d\d\d/g, '')}&details=${encodeURIComponent('Cita en Beauty Manager con ' + newAppt.professionalName)}&location=Beauty+Manager+Studio`;
+            const [stHour, stMin] = selectedTime.split(':').map(Number);
+            const startDate = new Date(selectedDate);
+            startDate.setHours(stHour, stMin, 0, 0);
+            const endDate = new Date(startDate.getTime() + currentDurationMinutes * 60000);
+
+            const toGCalISO = (d: Date) => d.toISOString().replace(/-|:|\.\d\d\d/g, '');
+
+            const gCalUrl = `https://www.google.com/calendar/render?action=TEMPLATE&text=${encodeURIComponent(newAppt.service)}&dates=${toGCalISO(startDate)}/${toGCalISO(endDate)}&details=${encodeURIComponent('Cita con ' + newAppt.professionalName + (userRole !== 'client' ? ` - Cliente: ${clientName} (${clientPhone})` : ''))}&location=Beauty+Manager+Studio`;
 
             setBookedApptDetails(newAppt);
             setSuccessLink(gCalUrl);
