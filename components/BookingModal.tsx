@@ -35,7 +35,8 @@ const BookingModal: React.FC<BookingModalProps> = ({
         appointments,
         addAppointment,
         clients,
-        addClient
+        addClient,
+        updateUserProfile
     } = useData();
 
     // --- FORM STATE ---
@@ -221,6 +222,12 @@ const BookingModal: React.FC<BookingModalProps> = ({
         setFormError('');
 
         try {
+            if (userRole === 'client' && (clientPhone !== userProfile.phone || clientName !== userProfile.name)) {
+                await updateUserProfile({
+                    phone: clientPhone,
+                    name: clientName
+                });
+            }
             if (!existingClient && userRole !== 'client') {
                 await addClient({
                     name: clientName,
@@ -392,9 +399,9 @@ const BookingModal: React.FC<BookingModalProps> = ({
                                                 maxLength={10}
                                                 value={clientPhone}
                                                 onChange={handlePhoneChange}
-                                                readOnly={userRole === 'client'}
+                                                readOnly={false}
                                                 placeholder="Ej: 3001234567"
-                                                className={`w-full rounded-2xl border-2 border-slate-100 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900 pl-11 pr-3 md:pl-12 md:pr-4 h-14 text-sm md:text-base font-bold outline-none transition-all dark:text-white ${userRole === 'client' ? 'opacity-70 grayscale bg-slate-200' : 'focus:border-primary focus:bg-white dark:focus:border-primary/50'}`}
+                                                className={`w-full rounded-2xl border-2 border-slate-100 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900 pl-11 pr-3 md:pl-12 md:pr-4 h-14 text-sm md:text-base font-bold outline-none transition-all dark:text-white focus:border-primary focus:bg-white dark:focus:border-primary/50`}
                                             />
                                         </div>
                                     </div>
@@ -424,9 +431,9 @@ const BookingModal: React.FC<BookingModalProps> = ({
                                             type="text"
                                             value={clientName}
                                             onChange={(e) => setClientName(e.target.value)}
-                                            readOnly={userRole === 'client' || !!existingClient}
+                                            readOnly={userRole !== 'client' && !!existingClient}
                                             placeholder="Nombre del cliente"
-                                            className={`w-full rounded-2xl border-2 border-slate-100 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900 pl-12 pr-4 h-14 text-base font-bold outline-none transition-all dark:text-white ${userRole === 'client' || !!existingClient ? 'opacity-70 grayscale bg-slate-200' : 'focus:border-primary focus:bg-white dark:focus:border-primary/50'}`}
+                                            className={`w-full rounded-2xl border-2 border-slate-100 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900 pl-12 pr-4 h-14 text-base font-bold outline-none transition-all dark:text-white ${userRole !== 'client' && !!existingClient ? 'opacity-70 grayscale bg-slate-200' : 'focus:border-primary focus:bg-white dark:focus:border-primary/50'}`}
                                         />
                                         {existingClient && userRole !== 'client' && <span className="absolute right-4 top-1/2 -translate-y-1/2 text-[10px] font-black text-primary bg-primary/10 px-3 py-1.5 rounded-full uppercase tracking-widest">Cliente Frecuente</span>}
                                     </div>
