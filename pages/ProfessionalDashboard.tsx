@@ -470,26 +470,30 @@ const ProfessionalDashboard: React.FC = () => {
             .slice(0, 10); // Mostrar las últimas 10
     }, [appointments]);
 
-    // Filtrar citas ACTIVAS (Pendientes/Confirmadas y FUTURAS) para el contador de Total Citas
-    const activeAppointmentsCount = useMemo(() => {
+    // Citas de HOY (Active/Pending/Confirmed/Completed) - Excluye canceladas
+    const todayCount = useMemo(() => {
         const now = new Date();
-        return appointments.filter(appt => {
-            if (appt.status === 'cancelled') return false;
-            if (!appt.date) return false;
+        const startOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+        const endOfDay = startOfDay + 24 * 60 * 60 * 1000;
 
-            const [hours, minutes] = appt.time.split(':').map(Number);
-            const startTime = new Date(appt.date);
-            startTime.setHours(hours, minutes, 0, 0);
+        return appointments.filter(a => {
+            if (a.status === 'cancelled') return false;
+            if (!a.date) return false;
+            const aDate = new Date(a.date).getTime();
+            return aDate >= startOfDay && aDate < endOfDay;
+        }).length;
+    }, [appointments]);
 
-            let durationMinutes = 60;
-            const hMatch = appt.duration.match(/(\d+)h/);
-            const mMatch = appt.duration.match(/(\d+)m/);
-            if (hMatch) durationMinutes = parseInt(hMatch[1]) * 60;
-            if (mMatch) durationMinutes += parseInt(mMatch[1]);
-            else if (!hMatch && !mMatch) durationMinutes = 60;
+    // Citas Confirmadas Futuras (Incluye hoy y días futuros)
+    const futureConfirmedCount = useMemo(() => {
+        const now = new Date();
+        const startOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
 
-            const endTime = new Date(startTime.getTime() + durationMinutes * 60000);
-            return now < endTime; // Solo las que no han terminado
+        return appointments.filter(a => {
+            if (a.status !== 'confirmed') return false;
+            if (!a.date) return false;
+            const aDate = new Date(a.date).getTime();
+            return aDate >= startOfDay;
         }).length;
     }, [appointments]);
 
@@ -520,11 +524,11 @@ const ProfessionalDashboard: React.FC = () => {
                         <div className="bg-primary/10 p-2.5 rounded-full text-primary group-hover:bg-primary group-hover:text-white transition-colors">
                             <span className="material-symbols-outlined">event_available</span>
                         </div>
-                        <span className="text-xs font-bold text-green-600 bg-green-100 dark:bg-green-900/30 dark:text-green-400 px-2.5 py-1 rounded-full">+{appointments.filter(a => a.status === 'confirmed').length} activos</span>
+                        <span className="text-xs font-bold text-green-600 bg-green-100 dark:bg-green-900/30 dark:text-green-400 px-2.5 py-1 rounded-full">+{futureConfirmedCount} por atender</span>
                     </div>
                     <div>
-                        <p className="text-text-sec-light dark:text-text-sec-dark text-sm font-medium mb-1 group-hover:text-primary transition-colors">Total Citas</p>
-                        <p className="text-3xl font-bold text-text-main-light dark:text-text-main-dark tracking-tight">{activeAppointmentsCount}</p>
+                        <p className="text-text-sec-light dark:text-text-sec-dark text-sm font-medium mb-1 group-hover:text-primary transition-colors">Total Citas Hoy</p>
+                        <p className="text-3xl font-bold text-text-main-light dark:text-text-main-dark tracking-tight">{todayCount}</p>
                     </div>
                 </div>
                 <div
