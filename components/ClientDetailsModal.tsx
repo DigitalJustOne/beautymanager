@@ -26,11 +26,15 @@ const ClientDetailsModal: React.FC<ClientDetailsModalProps> = ({ isOpen, onClose
                     <span className="text-white/20 font-black text-5xl select-none absolute bottom-[-10px]">CLIENTE</span>
                 </div>
 
-                <div className="px-6 pb-8 pt-2 relative bg-white dark:bg-[#1e293b] overflow-y-auto">{/* Added overflow-y-auto and pt-2 */}
-                    {/* Avatar */}
-                    <div className="flex flex-col items-center -mt-12 mb-4 relative z-10">
-                        <div className="size-24 rounded-full border-[5px] border-white dark:border-[#1e293b] bg-cover bg-center bg-gray-200 shadow-md" style={{ backgroundImage: `url("${client.avatar}")` }}></div>
+
+                {/* Fixed Avatar - Outside Scroll View */}
+                <div className="absolute top-16 left-1/2 -translate-x-1/2 z-20 pointer-events-none">
+                    <div className="size-24 rounded-full border-[5px] border-white dark:border-[#1e293b] bg-cover bg-center bg-gray-200 shadow-md flex items-center justify-center overflow-hidden" style={{ backgroundImage: `url("${client.avatar}")` }}>
+                        {!client.avatar && <span className="material-symbols-outlined text-4xl text-slate-400">person</span>}
                     </div>
+                </div>
+
+                <div className="px-6 pb-8 pt-20 relative bg-white dark:bg-[#1e293b] overflow-y-auto">{/* Increased top padding */}
 
                     {/* Basic Info */}
                     <div className="text-center mb-6">
