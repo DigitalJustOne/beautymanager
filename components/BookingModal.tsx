@@ -115,7 +115,7 @@ const BookingModal: React.FC<BookingModalProps> = ({
 
     const currentDurationMinutes = useMemo(() => {
         let minutes = getServiceBaseMinutes(service);
-        if (removalType && !service.includes('Retiro') && !service.includes('Corte') && !service.includes('Masaje') && !service.includes('Depilación') && !service.includes('Epilación')) {
+        if (removalType && service && !service.includes('Retiro') && !service.includes('Corte') && !service.includes('Masaje') && !service.includes('Depilación') && !service.includes('Epilación')) {
             minutes += 30;
         }
         return minutes;
@@ -123,7 +123,7 @@ const BookingModal: React.FC<BookingModalProps> = ({
 
     const availableProfessionals = useMemo(() => {
         if (!service) return professionals;
-        return professionals.filter(p => p.services.includes(service));
+        return professionals.filter(p => p.specialties && Array.isArray(p.specialties) && p.specialties.includes(service));
     }, [service, professionals]);
 
     const availableDays = useMemo(() => {
@@ -193,7 +193,7 @@ const BookingModal: React.FC<BookingModalProps> = ({
             if (appt.date?.toDateString() !== selectedDate.toDateString()) return false;
 
             const apptStart = appt.time.split(':').reduce((acc, curr, i) => acc + Number(curr) * (i === 0 ? 60 : 1), 0);
-            const apptDuration = appt.duration.includes('h') ? 90 : parseInt(appt.duration);
+            const apptDuration = (appt.duration && appt.duration.includes('h')) ? 90 : parseInt(appt.duration || '60');
             const apptEnd = apptStart + apptDuration;
 
             return (startMin < apptEnd && endMin > apptStart);
@@ -448,7 +448,7 @@ const BookingModal: React.FC<BookingModalProps> = ({
                                     </div>
 
                                     {/* --- REMOVAL AD-ONS --- */}
-                                    {service && !service.includes('Retiro') && !service.includes('Corte') && !service.includes('Masaje') && !service.includes('Depilación') && !service.includes('Epilación') && (
+                                    {service && service.includes && !service.includes('Retiro') && !service.includes('Corte') && !service.includes('Masaje') && !service.includes('Depilación') && !service.includes('Epilación') && (
                                         <div className="mt-3 p-4 bg-slate-50 dark:bg-slate-900/50 rounded-2xl border-2 border-slate-100 dark:border-slate-800 border-dashed">
                                             <span className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-3">¿Incluir Retiro? (+30m)</span>
                                             <div className="grid grid-cols-2 gap-2">
