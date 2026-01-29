@@ -41,7 +41,13 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     const { session, role, profile } = useAuth();
 
     // --- 1. Initialize State from Cache (Instant Load) ---
-    const [appointments, setAppointments] = useState<Appointment[]>(() => safeParse('beautymanager_appts', []));
+    const [appointments, setAppointments] = useState<Appointment[]>(() => {
+        const cached = safeParse<any[]>('beautymanager_appts', []);
+        return cached.map(a => ({
+            ...a,
+            date: a.date ? new Date(a.date) : undefined
+        }));
+    });
     const [clients, setClients] = useState<Client[]>(() => safeParse('beautymanager_clients', []));
     const [professionals, setProfessionals] = useState<Professional[]>(() => safeParse('beautymanager_pros', []));
     const [services, setServices] = useState<Service[]>(() => safeParse('beautymanager_services', []));
