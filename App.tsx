@@ -11,6 +11,7 @@ import ForgotPassword from './pages/ForgotPassword';
 import UpdatePassword from './pages/UpdatePassword';
 import ProfessionalDashboard from './pages/ProfessionalDashboard';
 import ClientDashboard from './pages/ClientDashboard';
+import Services from './pages/Services';
 import { DataProvider } from './context/DataContext';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { supabase } from './services/supabase';
@@ -99,6 +100,11 @@ const App: React.FC = () => {
                         <Route path="/team" element={
                             <ProtectedRoute allowedRoles={['admin', 'professional']}>
                                 <Layout><Team /></Layout>
+                            </ProtectedRoute>
+                        } />
+                        <Route path="/services" element={
+                            <ProtectedRoute allowedRoles={['admin']}>
+                                <Layout><Services /></Layout>
                             </ProtectedRoute>
                         } />
                         <Route path="/settings" element={

@@ -10,6 +10,7 @@ const menuItems: MenuItem[] = [
     { path: '/agenda', icon: 'calendar_today', label: 'Agenda' },
     { path: '/clients', icon: 'group', label: 'Clientes' },
     { path: '/team', icon: 'badge', label: 'Equipo' }, // Nuevo item
+    { path: '/services', icon: 'spa', label: 'Servicios' },
     { path: '/settings', icon: 'settings', label: 'Ajustes' },
 ];
 

@@ -3,7 +3,7 @@ import { useData } from '../context/DataContext';
 import { supabase } from '../services/supabase';
 
 const ClientDashboard: React.FC = () => {
-    const { appointments, userProfile, updateUserProfile, professionals, addAppointment } = useData();
+    const { appointments, userProfile, updateUserProfile, professionals, addAppointment, services } = useData();
 
     // RLS filters appointments for us (DataContext logic)
     // For clients: appointments contains OWN (full) + OTHERS (masked)
@@ -49,24 +49,8 @@ const ClientDashboard: React.FC = () => {
 
     // --- HELPERS ---
     const getServiceBaseMinutes = (serviceName: string) => {
-        const durations: { [key: string]: number } = {
-            'Corte de Cabello': 60,
-            'Esmaltado Tradicional': 60,
-            'Semipermanente Hombre': 60,
-            'Semipermanente Pies': 60,
-            'Semipermanente Manos': 120,
-            'Nivelación Base Ruber': 120,
-            'Builder Gel': 150,
-            'Dipping': 120,
-            'Soft Gel': 150,
-            'Retiro (Solo Retiro)': 30,
-            'Depilación de Axilas': 20,
-            'Epilación de Cejas': 20,
-            'Epilación de Bozo': 15,
-            'Epilación y Sombreado de Cejas en Henna': 45,
-            'Masaje Relajante': 60
-        };
-        return durations[serviceName] || 60;
+        const found = services.find(s => s.name === serviceName);
+        return found ? found.duration : 60;
     };
 
     const currentDurationMinutes = useMemo(() => {
@@ -86,24 +70,8 @@ const ClientDashboard: React.FC = () => {
     };
 
     const getServiceBasePrice = (serviceName: string): number => {
-        const prices: { [key: string]: number } = {
-            'Corte de Cabello': 35000,
-            'Esmaltado Tradicional': 30000,
-            'Semipermanente Hombre': 35000,
-            'Semipermanente Pies': 48000,
-            'Semipermanente Manos': 55000,
-            'Nivelación Base Ruber': 70000,
-            'Builder Gel': 80000,
-            'Dipping': 80000,
-            'Soft Gel': 85000,
-            'Retiro (Solo Retiro)': 20000,
-            'Depilación de Axilas': 25000,
-            'Epilación de Cejas': 25000,
-            'Epilación de Bozo': 18000,
-            'Epilación y Sombreado de Cejas en Henna': 35000,
-            'Masaje Relajante': 90000
-        };
-        return prices[serviceName] || 0;
+        const found = services.find(s => s.name === serviceName);
+        return found ? found.price : 0;
     };
 
     const currentTotalPrice = useMemo(() => {
@@ -587,11 +555,11 @@ const ClientDashboard: React.FC = () => {
                                 </div>
 
                                 {/* PRICE BANNER */}
-                                <div className="flex items-center justify-center bg-green-50 dark:bg-green-900/10 border border-green-200 dark:border-green-800 rounded-2xl p-4 my-2 relative overflow-hidden group">
+                                <div className="flex items-center justify-center bg-green-50 dark:bg-green-900/10 border border-green-200 dark:border-green-800 rounded-2xl p-6 my-2 relative overflow-hidden group">
                                     <div className="absolute inset-0 bg-green-500/5 translate-y-full group-hover:translate-y-0 transition-transform duration-500"></div>
                                     <div className="text-center relative z-10">
                                         <span className="block text-[10px] font-black text-green-600 dark:text-green-400 uppercase tracking-widest mb-1">Inversión Final</span>
-                                        <span className="block text-4xl font-black text-green-600 dark:text-green-400 tracking-tight">{formatPrice(currentTotalPrice)}</span>
+                                        <span className="block text-4xl font-black text-green-600 dark:text-green-400 tracking-tight leading-normal">{formatPrice(currentTotalPrice)}</span>
                                     </div>
                                 </div>
 
@@ -606,31 +574,13 @@ const ClientDashboard: React.FC = () => {
                                                 onChange={e => setService(e.target.value)}
                                                 className="w-full rounded-xl border border-border-light dark:border-border-dark bg-background-light dark:bg-background-dark pl-10 pr-4 h-12 text-sm font-bold focus:border-primary focus:ring-1 focus:ring-primary dark:text-white outline-none transition-all appearance-none truncate"
                                             >
-                                                <optgroup label="Cortes">
-                                                    <option>Corte de Cabello</option>
-                                                </optgroup>
-                                                <optgroup label="Servicios de Uñas">
-                                                    <option>Esmaltado Tradicional</option>
-                                                    <option>Semipermanente Hombre</option>
-                                                    <option>Semipermanente Pies</option>
-                                                    <option>Semipermanente Manos</option>
-                                                    <option>Nivelación Base Ruber</option>
-                                                    <option>Builder Gel</option>
-                                                    <option>Dipping</option>
-                                                    <option>Soft Gel</option>
-                                                </optgroup>
-                                                <optgroup label="Retiros">
-                                                    <option>Retiro (Solo Retiro)</option>
-                                                </optgroup>
-                                                <optgroup label="Depilación y Epilación">
-                                                    <option>Depilación de Axilas</option>
-                                                    <option>Epilación de Cejas</option>
-                                                    <option>Epilación de Bozo</option>
-                                                    <option>Epilación y Sombreado de Cejas en Henna</option>
-                                                </optgroup>
-                                                <optgroup label="Bienestar">
-                                                    <option>Masaje Relajante</option>
-                                                </optgroup>
+                                                {Array.from(new Set(services.map(s => s.category))).map(cat => (
+                                                    <optgroup key={cat} label={cat}>
+                                                        {services.filter(s => s.category === cat).map(s => (
+                                                            <option key={s.id} value={s.name}>{s.name}</option>
+                                                        ))}
+                                                    </optgroup>
+                                                ))}
                                             </select>
                                             <span className="material-symbols-outlined absolute right-3 top-1/2 -translate-y-1/2 text-text-sec-light pointer-events-none">expand_more</span>
                                         </div>

@@ -68,3 +68,11 @@ export interface UserProfile {
     isGoogleCalendarConnected: boolean;
     schedule: DaySchedule[];
 }
+
+export interface Service {
+    id: number;
+    name: string;
+    price: number;
+    duration: number; // minutes
+    category: string;
+}

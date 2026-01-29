@@ -1,6 +1,6 @@
 
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
-import { Appointment, Client, UserProfile, Professional } from '../types';
+import { Appointment, Client, UserProfile, Professional, Service } from '../types';
 import { supabase } from '../services/supabase';
 import { useAuth } from './AuthContext';
 
@@ -19,6 +19,10 @@ interface DataContextType {
     deleteProfessional: (id: number) => Promise<void>;
     updateClient: (id: number, data: Partial<Client>) => Promise<void>;
     deleteClient: (id: number) => Promise<void>;
+    services: Service[];
+    addService: (service: Omit<Service, 'id'>) => Promise<void>;
+    updateService: (id: number, data: Partial<Service>) => Promise<void>;
+    deleteService: (id: number) => Promise<void>;
 }
 
 const DataContext = createContext<DataContextType | undefined>(undefined);
@@ -28,6 +32,7 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     const [appointments, setAppointments] = useState<Appointment[]>([]);
     const [clients, setClients] = useState<Client[]>([]);
     const [professionals, setProfessionals] = useState<Professional[]>([]);
+    const [services, setServices] = useState<Service[]>([]);
     // Horario predeterminado para los 7 días de la semana
     const defaultSchedule = [
         { day: 'Lunes', enabled: true, start: '09:00', end: '18:00' },
@@ -66,6 +71,18 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         }));
 
         const fetchData = async () => {
+            // 0. Fetch Services (Visible to all)
+            const { data: servicesData } = await supabase.from('services').select('*').order('category', { ascending: true });
+            if (servicesData) {
+                setServices(servicesData.map((s: any) => ({
+                    id: s.id,
+                    name: s.name,
+                    price: s.price,
+                    duration: s.duration,
+                    category: s.category
+                })));
+            }
+
             // 1. Fetch Professionals (Visible to all)
             const { data: prosData } = await supabase.from('professionals').select('*');
             let mappedPros: Professional[] = [];
@@ -429,12 +446,43 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         }
     };
 
+    const addService = async (service: Omit<Service, 'id'>) => {
+        const { data, error } = await supabase.from('services').insert(service).select().single();
+        if (error) {
+            console.error("Error adding service:", error);
+            alert("Error al agregar servicio: " + error.message);
+        } else if (data) {
+            setServices(prev => [...prev, data]);
+        }
+    };
+
+    const updateService = async (id: number, data: Partial<Service>) => {
+        const { error } = await supabase.from('services').update(data).eq('id', id);
+        if (error) {
+            console.error("Error updating service:", error);
+            alert("Error al actualizar servicio: " + error.message);
+        } else {
+            setServices(prev => prev.map(s => s.id === id ? { ...s, ...data } : s));
+        }
+    };
+
+    const deleteService = async (id: number) => {
+        const { error } = await supabase.from('services').delete().eq('id', id);
+        if (error) {
+            console.error("Error deleting service:", error);
+            alert("Error al eliminar servicio: " + error.message);
+        } else {
+            setServices(prev => prev.filter(s => s.id !== id));
+        }
+    };
+
     return (
         <DataContext.Provider value={{
             appointments,
             clients,
             userProfile,
             professionals,
+            services,
             addAppointment,
             addClient,
             updateAppointmentStatus,
@@ -444,7 +492,10 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
             updateProfessional,
             deleteProfessional,
             updateClient,
-            deleteClient
+            deleteClient,
+            addService,
+            updateService,
+            deleteService
         }}>
             {children}
         </DataContext.Provider>
