@@ -282,7 +282,7 @@ const Clients: React.FC = () => {
                                         <td className="px-6 py-4">
                                             <div className="inline-flex items-center gap-2 text-[#111618] dark:text-gray-200">
                                                 <span className="text-sm font-medium">{client.phone}</span>
-                                                <a href={`https://wa.me/${client.phone}`} target="_blank" rel="noreferrer" className="material-symbols-outlined text-[18px] text-green-500 hover:scale-110 transition-transform cursor-pointer" title="Enviar WhatsApp">chat</a>
+                                                <a href={`https://wa.me/57${client.phone}`} target="_blank" rel="noreferrer" className="material-symbols-outlined text-[18px] text-green-500 hover:scale-110 transition-transform cursor-pointer" title="Enviar WhatsApp">chat</a>
                                             </div>
                                         </td>
                                         <td className="px-6 py-4"><span className="text-[#617c89] dark:text-slate-300 text-sm">{client.email}</span></td>
