@@ -35,7 +35,7 @@ const ClientDashboard: React.FC = () => {
 
     // --- STATES FOR BOOKING DISCOVERY ---
     const [isModalOpen, setIsModalOpen] = useState(false);
-    const [service, setService] = useState('Semipermanente Manos');
+    const [service, setService] = useState('');
     const [selectedProfessionalId, setSelectedProfessionalId] = useState<number | ''>('');
     const [selectedDate, setSelectedDate] = useState<Date | null>(null);
     const [selectedTime, setSelectedTime] = useState<string | null>(null);
@@ -460,8 +460,11 @@ const ClientDashboard: React.FC = () => {
                 <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4 animate-in fade-in" onClick={(e) => e.stopPropagation()}>
                     <div className="bg-card-light dark:bg-card-dark rounded-2xl shadow-2xl w-full max-w-xl overflow-hidden flex flex-col max-h-[90vh]">
                         <div className="p-4 bg-primary text-white flex justify-between items-center shrink-0">
-                            <h3 className="font-bold text-lg">{successLink ? '¡Todo Listo!' : 'Nueva Solicitud'}</h3>
-                            <button onClick={resetModal}><span className="material-symbols-outlined">close</span></button>
+                            <div className="flex items-center gap-2">
+                                <span className="material-symbols-outlined">{successLink ? 'task_alt' : 'add_circle'}</span>
+                                <h3 className="font-bold text-lg">{successLink ? '¡Todo Listo!' : 'Nueva Cita'}</h3>
+                            </div>
+                            <button onClick={resetModal} className="hover:bg-white/20 p-1 rounded-full transition-colors"><span className="material-symbols-outlined">close</span></button>
                         </div>
 
                         {successLink ? (
@@ -522,20 +525,24 @@ const ClientDashboard: React.FC = () => {
                                 )}
 
                                 {/* Datos - Locked for consistency */}
-                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 opacity-75 pointer-events-none">
-                                    <div className="flex flex-col gap-1">
-                                        <label className="text-[10px] font-bold uppercase tracking-widest text-text-sec-light pl-1">WhatsApp</label>
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 opacity-75">
+                                    <div className="flex flex-col gap-2">
+                                        <label className="text-sm font-bold text-text-main-light dark:text-text-main-dark">Celular</label>
                                         <div className="relative">
-                                            <span className="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-text-sec-light text-sm">smartphone</span>
-                                            <input type="text" value={userProfile.phone || ''} readOnly className="w-full rounded-xl border bg-gray-50 dark:bg-slate-800/50 pl-10 pr-4 h-12 text-sm text-gray-500 font-bold" />
+                                            <input type="text" value={userProfile.phone || ''} readOnly className="w-full rounded-xl border border-border-light dark:border-border-dark bg-gray-50 dark:bg-slate-800/50 px-4 h-12 text-sm text-gray-500 font-bold outline-none" />
                                         </div>
                                     </div>
-                                    <div className="flex flex-col gap-1">
-                                        <label className="text-[10px] font-bold uppercase tracking-widest text-text-sec-light pl-1">Email</label>
+                                    <div className="flex flex-col gap-2">
+                                        <label className="text-sm font-bold text-text-main-light dark:text-text-main-dark">Correo Electrónico</label>
                                         <div className="relative">
-                                            <span className="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-text-sec-light text-sm">mail</span>
-                                            <input type="text" value={userProfile.email} readOnly className="w-full rounded-xl border bg-gray-50 dark:bg-slate-800/50 pl-10 pr-4 h-12 text-sm text-gray-500 font-bold truncate" />
+                                            <input type="text" value={userProfile.email} readOnly className="w-full rounded-xl border border-border-light dark:border-border-dark bg-gray-50 dark:bg-slate-800/50 px-4 h-12 text-sm text-gray-500 font-bold outline-none truncate" />
                                         </div>
+                                    </div>
+                                </div>
+                                <div className="flex flex-col gap-2 opacity-75">
+                                    <label className="text-sm font-bold text-text-main-light dark:text-text-main-dark">Nombre del Cliente</label>
+                                    <div className="relative">
+                                        <input type="text" value={userProfile.name} readOnly className="w-full rounded-xl border border-border-light dark:border-border-dark bg-gray-50 dark:bg-slate-800/50 px-4 h-12 text-sm text-gray-500 font-bold outline-none" />
                                     </div>
                                 </div>
 
@@ -543,7 +550,7 @@ const ClientDashboard: React.FC = () => {
                                 <div className="flex items-center justify-center bg-green-50 dark:bg-green-900/10 border border-green-200 dark:border-green-800 rounded-2xl p-6 my-2 relative overflow-hidden group">
                                     <div className="absolute inset-0 bg-green-500/5 translate-y-full group-hover:translate-y-0 transition-transform duration-500"></div>
                                     <div className="text-center relative z-10">
-                                        <span className="block text-[10px] font-black text-green-600 dark:text-green-400 uppercase tracking-widest mb-1">Inversión Final</span>
+                                        <span className="block text-xs font-bold text-green-600 dark:text-green-400 uppercase tracking-wider mb-1">Valor Total del Servicio</span>
                                         <span className="block text-4xl font-black text-green-600 dark:text-green-400 tracking-tight leading-normal">{formatPrice(currentTotalPrice)}</span>
                                     </div>
                                 </div>
@@ -551,14 +558,15 @@ const ClientDashboard: React.FC = () => {
                                 {/* Selection Area */}
                                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                     <div className="flex flex-col gap-2">
-                                        <label className="text-sm font-black">Servicio</label>
+                                        <label className="text-sm font-bold text-text-main-light dark:text-text-main-dark">Servicio</label>
                                         <div className="relative">
-                                            <span className="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-text-sec-light">spa</span>
+
                                             <select
                                                 value={service}
                                                 onChange={e => setService(e.target.value)}
-                                                className="w-full rounded-xl border border-border-light dark:border-border-dark bg-background-light dark:bg-background-dark pl-10 pr-4 h-12 text-sm font-bold focus:border-primary focus:ring-1 focus:ring-primary dark:text-white outline-none transition-all appearance-none truncate"
+                                                className="w-full rounded-xl border border-border-light dark:border-border-dark bg-background-light dark:bg-background-dark px-4 h-12 text-sm focus:border-primary focus:ring-1 focus:ring-primary dark:text-white outline-none transition-all appearance-none truncate"
                                             >
+                                                <option value="" disabled>Seleccione un servicio...</option>
                                                 {Array.from(new Set(services.map(s => s.category))).map(cat => (
                                                     <optgroup key={cat} label={cat}>
                                                         {services.filter(s => s.category === cat).map(s => (
@@ -584,14 +592,14 @@ const ClientDashboard: React.FC = () => {
                                     </div>
 
                                     <div className="flex flex-col gap-2">
-                                        <label className="text-sm font-black">Profesional</label>
+                                        <label className="text-sm font-bold text-text-main-light dark:text-text-main-dark">Profesional</label>
                                         <div className="relative">
-                                            <span className="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-text-sec-light">badge</span>
+
                                             <select
                                                 value={selectedProfessionalId}
                                                 onChange={(e) => setSelectedProfessionalId(Number(e.target.value))}
                                                 required
-                                                className="w-full rounded-xl border border-border-light dark:border-border-dark bg-background-light dark:bg-background-dark pl-10 pr-4 h-12 text-sm font-bold focus:border-primary focus:ring-1 focus:ring-primary dark:text-white outline-none transition-all appearance-none"
+                                                className="w-full rounded-xl border border-border-light dark:border-border-dark bg-background-light dark:bg-background-dark px-4 h-12 text-sm focus:border-primary focus:ring-1 focus:ring-primary dark:text-white outline-none transition-all appearance-none"
                                             >
                                                 <option value="" disabled>Seleccionar...</option>
                                                 {availableProfessionals.map(pro => (
@@ -685,7 +693,7 @@ const ClientDashboard: React.FC = () => {
                                         ) : (
                                             <>
                                                 <span className="material-symbols-outlined text-[20px]">send</span>
-                                                Solicitar Cita
+                                                Agendar y Enviar
                                             </>
                                         )}
                                     </button>

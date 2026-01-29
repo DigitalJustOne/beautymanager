@@ -25,7 +25,7 @@ const Agenda: React.FC = () => {
     const [clientName, setClientName] = useState('');
     const [clientPhone, setClientPhone] = useState('');
     const [clientEmail, setClientEmail] = useState('');
-    const [service, setService] = useState('Semipermanente Manos');
+    const [service, setService] = useState('');
     const [selectedProfessionalId, setSelectedProfessionalId] = useState<number | ''>('');
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [selectedDate, setSelectedDate] = useState<Date | null>(null);
