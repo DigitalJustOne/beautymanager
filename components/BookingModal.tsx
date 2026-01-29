@@ -222,7 +222,7 @@ const BookingModal: React.FC<BookingModalProps> = ({
 
         try {
             if (!existingClient && userRole !== 'client') {
-                addClient({
+                await addClient({
                     name: clientName,
                     phone: clientPhone,
                     email: clientEmail,
@@ -251,7 +251,7 @@ const BookingModal: React.FC<BookingModalProps> = ({
                 avatar: existingClient?.avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(clientName)}&background=random`
             };
 
-            addAppointment(newAppt);
+            await addAppointment(newAppt);
 
             const gCalUrl = `https://www.google.com/calendar/render?action=TEMPLATE&text=${encodeURIComponent(newAppt.service)}&dates=${selectedDate.toISOString().replace(/-|:|\.\d\d\d/g, '')}/${selectedDate.toISOString().replace(/-|:|\.\d\d\d/g, '')}&details=${encodeURIComponent('Cita en Beauty Manager con ' + newAppt.professionalName)}&location=Beauty+Manager+Studio`;
 
