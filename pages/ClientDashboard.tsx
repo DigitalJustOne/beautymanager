@@ -123,6 +123,7 @@ const ClientDashboard: React.FC = () => {
 
     // Filter professionals by service
     const availableProfessionals = useMemo(() => {
+        if (!service) return professionals;
         return professionals.filter(p => p.specialties.includes(service));
     }, [professionals, service]);
 
@@ -180,7 +181,7 @@ const ClientDashboard: React.FC = () => {
         while (currentTotalMinutes + currentDurationMinutes <= endTotalMinutes) {
             const h = Math.floor(currentTotalMinutes / 60);
             const m = currentTotalMinutes % 60;
-            const timeString = `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')} `;
+            const timeString = `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}`;
             slots.push(timeString);
             currentTotalMinutes += step;
         }
@@ -244,7 +245,7 @@ const ClientDashboard: React.FC = () => {
     const handleCreateAppointment = async (e: React.FormEvent) => {
         e.preventDefault();
         setFormError(null);
-        if (!selectedDate || !selectedTime || !selectedProfessionalId || isSubmitting) return;
+        if (!selectedDate || !selectedTime || !service || !selectedProfessionalId || isSubmitting) return;
 
         setIsSubmitting(true);
 
@@ -468,12 +469,12 @@ const ClientDashboard: React.FC = () => {
                         </div>
 
                         {successLink ? (
-                            <div className="p-8 flex flex-col items-center gap-6 text-center animate-in fade-in zoom-in duration-300">
+                            <div className="p-8 flex flex-col items-center gap-6 text-center animate-in fade-in zoom-in duration-300 overflow-y-auto scrollbar-hide">
                                 <div className="size-20 bg-green-100 dark:bg-green-900/30 text-green-600 dark:text-green-400 rounded-full flex items-center justify-center mb-2">
                                     <span className="material-symbols-outlined text-5xl">check_circle</span>
                                 </div>
                                 <div className="mb-2">
-                                    <h4 className="text-2xl font-black mb-1">¡Cita Solicitada!</h4>
+                                    <h4 className="text-2xl font-black mb-1">¡Cita Registrada!</h4>
                                     <p className="text-text-sec-light">Tu servicio ha sido agendado exitosamente.</p>
                                 </div>
 
@@ -516,11 +517,21 @@ const ClientDashboard: React.FC = () => {
                                 <button onClick={resetModal} className="text-primary font-bold hover:underline py-2">Volver al Inicio</button>
                             </div>
                         ) : (
-                            <form onSubmit={handleCreateAppointment} className="flex-1 overflow-y-auto p-6 flex flex-col gap-5 scrollbar-hide">
+                            <form onSubmit={handleCreateAppointment} className="flex-1 overflow-y-auto p-6 flex flex-col gap-6 scrollbar-hide">
+                                <div className="bg-blue-50 dark:bg-blue-900/20 p-4 rounded-xl flex items-start gap-3 border border-blue-100 dark:border-blue-900/30">
+                                    <span className="material-symbols-outlined text-blue-500 mt-0.5">info</span>
+                                    <p className="text-sm text-blue-800 dark:text-blue-200">
+                                        Su cita se registrará automáticamente y recibirá una invitación para su calendario.
+                                    </p>
+                                </div>
+
                                 {formError && (
-                                    <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 text-red-600 dark:text-red-300 p-4 rounded-xl flex gap-3">
+                                    <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 text-red-600 dark:text-red-300 p-4 rounded-xl flex gap-3 animate-in fade-in slide-in-from-top-1">
                                         <span className="material-symbols-outlined shrink-0">error</span>
-                                        <span className="text-sm">{formError}</span>
+                                        <div className="flex flex-col">
+                                            <span className="font-bold text-sm">No se pudo agendar la cita</span>
+                                            <span className="text-xs">{formError}</span>
+                                        </div>
                                     </div>
                                 )}
 
@@ -529,42 +540,44 @@ const ClientDashboard: React.FC = () => {
                                     <div className="flex flex-col gap-2">
                                         <label className="text-sm font-bold text-text-main-light dark:text-text-main-dark">Celular</label>
                                         <div className="relative">
-                                            <input type="text" value={userProfile.phone || ''} readOnly className="w-full rounded-xl border border-border-light dark:border-border-dark bg-gray-50 dark:bg-slate-800/50 px-4 h-12 text-sm text-gray-500 font-bold outline-none" />
+                                            <span className="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-text-sec-light">smartphone</span>
+                                            <input type="text" value={userProfile.phone || ''} readOnly className="w-full rounded-xl border border-border-light dark:border-border-dark bg-gray-50 dark:bg-slate-800/50 pl-10 pr-4 h-12 text-sm text-gray-500 font-bold outline-none" />
                                         </div>
                                     </div>
                                     <div className="flex flex-col gap-2">
                                         <label className="text-sm font-bold text-text-main-light dark:text-text-main-dark">Correo Electrónico</label>
                                         <div className="relative">
-                                            <input type="text" value={userProfile.email} readOnly className="w-full rounded-xl border border-border-light dark:border-border-dark bg-gray-50 dark:bg-slate-800/50 px-4 h-12 text-sm text-gray-500 font-bold outline-none truncate" />
+                                            <span className="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-text-sec-light">mail</span>
+                                            <input type="text" value={userProfile.email} readOnly className="w-full rounded-xl border border-border-light dark:border-border-dark bg-gray-50 dark:bg-slate-800/50 pl-10 pr-4 h-12 text-sm text-gray-500 font-bold outline-none truncate" />
                                         </div>
                                     </div>
                                 </div>
                                 <div className="flex flex-col gap-2 opacity-75">
                                     <label className="text-sm font-bold text-text-main-light dark:text-text-main-dark">Nombre del Cliente</label>
                                     <div className="relative">
-                                        <input type="text" value={userProfile.name} readOnly className="w-full rounded-xl border border-border-light dark:border-border-dark bg-gray-50 dark:bg-slate-800/50 px-4 h-12 text-sm text-gray-500 font-bold outline-none" />
+                                        <span className="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-text-sec-light">person</span>
+                                        <input type="text" value={userProfile.name} readOnly className="w-full rounded-xl border border-border-light dark:border-border-dark bg-gray-50 dark:bg-slate-800/50 pl-10 pr-4 h-12 text-sm text-gray-500 font-bold outline-none" />
                                     </div>
                                 </div>
 
-                                {/* PRICE BANNER */}
-                                <div className="flex items-center justify-center bg-green-50 dark:bg-green-900/10 border border-green-200 dark:border-green-800 rounded-2xl p-6 my-2 relative overflow-hidden group">
-                                    <div className="absolute inset-0 bg-green-500/5 translate-y-full group-hover:translate-y-0 transition-transform duration-500"></div>
-                                    <div className="text-center relative z-10">
+                                {/* PRICE DISPLAY BANNER - FIXED CLIPPING */}
+                                <div className="flex items-center justify-center bg-green-50 dark:bg-green-900/10 border border-green-200 dark:border-green-800 rounded-2xl py-6 px-4 my-2 min-h-[100px]">
+                                    <div className="text-center">
                                         <span className="block text-xs font-bold text-green-600 dark:text-green-400 uppercase tracking-wider mb-1">Valor Total del Servicio</span>
-                                        <span className="block text-4xl font-black text-green-600 dark:text-green-400 tracking-tight leading-normal">{formatPrice(currentTotalPrice)}</span>
+                                        <span className="block text-4xl font-black text-green-600 dark:text-green-400 tracking-tight leading-relaxed">{formatPrice(currentTotalPrice)}</span>
                                     </div>
                                 </div>
 
-                                {/* Selection Area */}
+                                {/* Servicio y Profesional */}
                                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                     <div className="flex flex-col gap-2">
                                         <label className="text-sm font-bold text-text-main-light dark:text-text-main-dark">Servicio</label>
                                         <div className="relative">
-
+                                            <span className="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-text-sec-light">spa</span>
                                             <select
                                                 value={service}
-                                                onChange={e => setService(e.target.value)}
-                                                className="w-full rounded-xl border border-border-light dark:border-border-dark bg-background-light dark:bg-background-dark px-4 h-12 text-sm focus:border-primary focus:ring-1 focus:ring-primary dark:text-white outline-none transition-all appearance-none truncate"
+                                                onChange={(e) => setService(e.target.value)}
+                                                className="w-full rounded-xl border border-border-light dark:border-border-dark bg-background-light dark:bg-background-dark pl-10 pr-4 h-12 text-sm focus:border-primary focus:ring-1 focus:ring-primary dark:text-white outline-none transition-all appearance-none truncate"
                                             >
                                                 <option value="" disabled>Seleccione un servicio...</option>
                                                 {Array.from(new Set(services.map(s => s.category))).map(cat => (
@@ -579,13 +592,49 @@ const ClientDashboard: React.FC = () => {
                                         </div>
 
                                         {!service.includes('Retiro') && !service.includes('Corte') && !service.includes('Masaje') && !service.includes('Depilación') && !service.includes('Epilación') && (
-                                            <div className="mt-2 p-3 bg-gray-50 dark:bg-slate-800/40 rounded-xl border border-dashed border-gray-200 dark:border-gray-700">
-                                                <span className="block text-[10px] font-black text-text-sec-light dark:text-text-sec-dark uppercase tracking-widest mb-2">¿Necesitas Retiro? (+30m)</span>
+                                            <div className="mt-2 p-3 bg-gray-50 dark:bg-card-dark rounded-xl border border-dashed border-gray-200 dark:border-gray-700">
+                                                <span className="block text-xs font-bold text-text-sec-light dark:text-text-sec-dark uppercase mb-2">¿Necesitas Retiro? (+30m)</span>
                                                 <div className="grid grid-cols-2 gap-2">
-                                                    <button type="button" onClick={() => setRemovalType('')} className={`px - 2 py - 2 text - xs rounded - lg font - bold border transition - all ${removalType === '' ? 'bg-gray-200 dark:bg-gray-700 text-gray-800 dark:text-white border-gray-300' : 'bg-white border-transparent'} `}>No</button>
-                                                    <button type="button" onClick={() => setRemovalType('semi')} className={`px - 2 py - 2 text - xs rounded - lg font - bold border transition - all truncate ${removalType === 'semi' ? 'bg-primary text-white border-primary shadow-sm' : 'bg-white border-gray-200 text-text-sec-light'} `}>Semi (+$10k)</button>
-                                                    <button type="button" onClick={() => setRemovalType('acrylic')} className={`px - 2 py - 2 text - xs rounded - lg font - bold border transition - all truncate ${removalType === 'acrylic' ? 'bg-purple-500 text-white border-purple-500 shadow-sm' : 'bg-white border-gray-200 text-text-sec-light'} `}>Acrílico (+$15k)</button>
-                                                    <button type="button" onClick={() => setRemovalType('feet')} className={`px - 2 py - 2 text - xs rounded - lg font - bold border transition - all truncate ${removalType === 'feet' ? 'bg-teal-500 text-white border-teal-500 shadow-sm' : 'bg-white border-gray-200 text-text-sec-light'} `}>Pies (+$8k)</button>
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => setRemovalType('')}
+                                                        className={`px-2 py-2 text-xs rounded-lg font-bold border transition-all ${removalType === ''
+                                                            ? 'bg-gray-200 dark:bg-gray-700 text-gray-800 dark:text-white border-gray-300 dark:border-gray-600'
+                                                            : 'bg-white dark:bg-background-dark text-gray-500 border-transparent hover:border-gray-200'
+                                                            }`}
+                                                    >
+                                                        No
+                                                    </button>
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => setRemovalType('semi')}
+                                                        className={`px-2 py-2 text-xs rounded-lg font-bold border transition-all truncate ${removalType === 'semi'
+                                                            ? 'bg-primary text-white border-primary shadow-sm'
+                                                            : 'bg-white dark:bg-background-dark text-gray-600 dark:text-gray-400 border-gray-200 dark:border-gray-700 hover:border-primary/50'
+                                                            }`}
+                                                    >
+                                                        Semi (+$10k)
+                                                    </button>
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => setRemovalType('acrylic')}
+                                                        className={`px-2 py-2 text-xs rounded-lg font-bold border transition-all truncate ${removalType === 'acrylic'
+                                                            ? 'bg-purple-500 text-white border-purple-500 shadow-sm'
+                                                            : 'bg-white dark:bg-background-dark text-gray-600 dark:text-gray-400 border-gray-200 dark:border-gray-700 hover:border-purple-500/50'
+                                                            }`}
+                                                    >
+                                                        Acrílico (+$15k)
+                                                    </button>
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => setRemovalType('feet')}
+                                                        className={`px-2 py-2 text-xs rounded-lg font-bold border transition-all truncate ${removalType === 'feet'
+                                                            ? 'bg-teal-500 text-white border-teal-500 shadow-sm'
+                                                            : 'bg-white dark:bg-background-dark text-gray-600 dark:text-gray-400 border-gray-200 dark:border-gray-700 hover:border-teal-500/50'
+                                                            }`}
+                                                    >
+                                                        Pies (+$8k)
+                                                    </button>
                                                 </div>
                                             </div>
                                         )}
@@ -594,12 +643,12 @@ const ClientDashboard: React.FC = () => {
                                     <div className="flex flex-col gap-2">
                                         <label className="text-sm font-bold text-text-main-light dark:text-text-main-dark">Profesional</label>
                                         <div className="relative">
-
+                                            <span className="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-text-sec-light">badge</span>
                                             <select
                                                 value={selectedProfessionalId}
                                                 onChange={(e) => setSelectedProfessionalId(Number(e.target.value))}
                                                 required
-                                                className="w-full rounded-xl border border-border-light dark:border-border-dark bg-background-light dark:bg-background-dark px-4 h-12 text-sm focus:border-primary focus:ring-1 focus:ring-primary dark:text-white outline-none transition-all appearance-none"
+                                                className="w-full rounded-xl border border-border-light dark:border-border-dark bg-background-light dark:bg-background-dark pl-10 pr-4 h-12 text-sm focus:border-primary focus:ring-1 focus:ring-primary dark:text-white outline-none transition-all appearance-none"
                                             >
                                                 <option value="" disabled>Seleccionar...</option>
                                                 {availableProfessionals.map(pro => (
@@ -613,37 +662,38 @@ const ClientDashboard: React.FC = () => {
 
                                 <div className="border-t border-border-light dark:border-border-dark my-1"></div>
 
-                                {/* Date Selection */}
+                                {/* Date Selection Grid - FIXED UI */}
                                 <div className="flex flex-col gap-2">
-                                    <label className="text-sm font-black flex items-center gap-2">
+                                    <label className="text-sm font-bold text-text-main-light dark:text-text-main-dark flex items-center gap-2">
                                         <span className="material-symbols-outlined text-primary text-[18px]">calendar_month</span>
-                                        Fecha
+                                        Selecciona Fecha Disponible
                                     </label>
-                                    <div className="flex overflow-x-auto gap-2 pb-2 scrollbar-hide snap-x">
+                                    <div className="flex overflow-x-auto gap-3 pb-4 scrollbar-hide snap-x min-h-[100px] items-center">
                                         {availableDays.map((date, idx) => (
                                             <button
                                                 type="button"
                                                 key={idx}
                                                 onClick={() => setSelectedDate(date)}
-                                                className={`snap - start shrink - 0 flex flex - col items - center justify - center w - 16 h - 20 rounded - xl border transition - all duration - 200 ${isDateSelected(date)
+                                                className={`snap-start shrink-0 flex flex-col items-center justify-center w-16 h-20 rounded-xl border transition-all duration-200 ${isDateSelected(date)
                                                     ? 'bg-primary border-primary text-white shadow-lg shadow-primary/30 scale-105'
                                                     : 'bg-white dark:bg-card-dark border-border-light dark:border-border-dark hover:border-primary text-text-sec-light dark:text-text-sec-dark hover:bg-primary/5'
-                                                    } `}
+                                                    }`}
                                             >
-                                                <span className="text-[10px] font-black uppercase tracking-tighter">{date.toLocaleDateString('es-ES', { weekday: 'short' })}</span>
+                                                <span className="text-[10px] font-bold uppercase tracking-tighter">{date.toLocaleDateString('es-ES', { weekday: 'short' })}</span>
                                                 <span className="text-xl font-black mt-1">{date.getDate()}</span>
                                             </button>
                                         ))}
                                     </div>
                                 </div>
 
-                                {/* Time Selection */}
-                                <div className={`flex flex - col gap - 2 transition - opacity duration - 300 ${selectedDate ? 'opacity-100' : 'opacity-50 pointer-events-none'} `}>
+                                {/* Time Selection Grid */}
+                                <div className={`flex flex-col gap-4 transition-opacity duration-300 ${selectedDate ? 'opacity-100' : 'opacity-50 pointer-events-none'}`}>
                                     <div className="flex items-center justify-between">
-                                        <label className="text-sm font-black flex items-center gap-2">
+                                        <label className="text-sm font-bold text-text-main-light dark:text-text-main-dark flex items-center gap-2">
                                             <span className="material-symbols-outlined text-primary text-[18px]">schedule</span>
-                                            Hora
-                                            <span className="text-[10px] font-black bg-blue-100 text-blue-700 px-2 py-0.5 rounded ml-2 uppercase tracking-widest">Duración: {formatDuration(currentDurationMinutes)}</span>
+                                            Selecciona Hora
+                                            {!selectedDate && <span className="text-[10px] font-normal text-red-500 ml-2">(Elige una fecha primero)</span>}
+                                            <span className="text-[10px] font-bold bg-blue-100 text-blue-700 px-2 py-0.5 rounded ml-2">Duración: {formatDuration(currentDurationMinutes)}</span>
                                         </label>
                                     </div>
 
@@ -656,13 +706,15 @@ const ClientDashboard: React.FC = () => {
                                                         type="button"
                                                         key={time}
                                                         disabled={isOccupied}
-                                                        onClick={() => { if (!isOccupied) setSelectedTime(time); }}
-                                                        className={`py - 2 rounded - lg text - sm font - black border transition - all relative overflow - hidden ${selectedTime === time
+                                                        onClick={() => {
+                                                            if (!isOccupied) setSelectedTime(time);
+                                                        }}
+                                                        className={`py-2 rounded-lg text-sm font-bold border transition-all relative overflow-hidden ${selectedTime === time
                                                             ? 'bg-primary border-primary text-white shadow-md z-10'
                                                             : isOccupied
-                                                                ? 'bg-gray-100 border-gray-200 text-gray-400 cursor-not-allowed opacity-50'
-                                                                : 'bg-white border-border-light text-text-main-light hover:bg-primary/10 hover:border-primary'
-                                                            } `}
+                                                                ? 'bg-gray-100 dark:bg-gray-800 border-gray-200 dark:border-gray-700 text-gray-400 dark:text-gray-600 cursor-not-allowed'
+                                                                : 'bg-white dark:bg-card-dark border-border-light dark:border-border-dark text-text-main-light dark:text-text-main-dark hover:bg-primary/10 hover:border-primary'
+                                                            }`}
                                                     >
                                                         {time}
                                                     </button>
@@ -670,7 +722,7 @@ const ClientDashboard: React.FC = () => {
                                             })
                                         ) : (
                                             selectedDate && (
-                                                <div className="col-span-4 text-center py-4 text-xs font-bold text-orange-500 bg-orange-50 rounded-xl border border-orange-100">
+                                                <div className="col-span-4 text-center py-4 text-xs font-bold text-orange-500 bg-orange-50 dark:bg-orange-900/20 rounded-xl border border-orange-100 dark:border-orange-900/30">
                                                     No hay horarios disponibles.
                                                 </div>
                                             )
@@ -678,12 +730,19 @@ const ClientDashboard: React.FC = () => {
                                     </div>
                                 </div>
 
-                                <div className="mt-4 pt-4 border-t flex gap-3">
-                                    <button type="button" onClick={resetModal} className="flex-1 py-3 font-black text-gray-400 hover:bg-gray-100 rounded-xl transition-colors">Cancelar</button>
+                                <div className="mt-4 pt-6 border-t border-border-light dark:border-border-dark flex gap-3 shrink-0">
+                                    <button
+                                        type="button"
+                                        onClick={resetModal}
+                                        disabled={isSubmitting}
+                                        className="flex-1 py-4 rounded-xl font-bold text-text-sec-light hover:bg-gray-100 dark:hover:bg-slate-800 transition-colors"
+                                    >
+                                        Cancelar
+                                    </button>
                                     <button
                                         type="submit"
-                                        disabled={!selectedDate || !selectedTime || !selectedProfessionalId || isSubmitting}
-                                        className="flex-1 py-3 bg-primary text-white rounded-xl font-black shadow-lg hover:bg-primary/90 transition-all active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                                        disabled={!selectedDate || !selectedTime || !service || !selectedProfessionalId || isSubmitting}
+                                        className="flex-1 py-4 bg-primary text-white rounded-xl font-bold shadow-lg hover:bg-primary/90 transition-all active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 h-14"
                                     >
                                         {isSubmitting ? (
                                             <>
@@ -693,7 +752,7 @@ const ClientDashboard: React.FC = () => {
                                         ) : (
                                             <>
                                                 <span className="material-symbols-outlined text-[20px]">send</span>
-                                                Agendar y Enviar
+                                                <span>Agendar y Enviar</span>
                                             </>
                                         )}
                                     </button>

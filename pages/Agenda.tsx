@@ -62,6 +62,7 @@ const Agenda: React.FC = () => {
 
     // Filtrar profesionales según el servicio seleccionado
     const availableProfessionals = useMemo(() => {
+        if (!service) return professionals;
         return professionals.filter(p => p.specialties.includes(service));
     }, [professionals, service]);
 
@@ -341,7 +342,7 @@ const Agenda: React.FC = () => {
         setClientName('');
         setClientPhone('');
         setClientEmail('');
-        setService('Semipermanente Manos');
+        setService('');
         setRemovalType('');
         setSelectedProfessionalId('');
         setSelectedDate(null);
@@ -353,7 +354,7 @@ const Agenda: React.FC = () => {
         e.preventDefault();
         setFormError(null);
 
-        if (!selectedDate || !selectedTime || !clientName || !clientEmail || clientPhone.length !== 10 || !selectedProfessionalId || isSubmitting) return;
+        if (!selectedDate || !selectedTime || !service || !clientName || !clientEmail || clientPhone.length !== 10 || !selectedProfessionalId || isSubmitting) return;
 
         // Validación Final de Conflicto (Doble chequeo)
         if (isSlotOccupied(selectedTime)) {
@@ -913,11 +914,11 @@ const Agenda: React.FC = () => {
                                         </div>
                                     </div>
 
-                                    {/* PRICE DISPLAY BANNER */}
-                                    <div className="flex items-center justify-center bg-green-50 dark:bg-green-900/10 border border-green-200 dark:border-green-800 rounded-2xl p-4 my-2">
+                                    {/* PRICE DISPLAY BANNER - FIXED CLIPPING */}
+                                    <div className="flex items-center justify-center bg-green-50 dark:bg-green-900/10 border border-green-200 dark:border-green-800 rounded-2xl py-6 px-4 my-2 min-h-[100px]">
                                         <div className="text-center">
                                             <span className="block text-xs font-bold text-green-600 dark:text-green-400 uppercase tracking-wider mb-1">Valor Total del Servicio</span>
-                                            <span className="block text-4xl font-black text-green-600 dark:text-green-400 tracking-tight">{formatPrice(currentTotalPrice)}</span>
+                                            <span className="block text-4xl font-black text-green-600 dark:text-green-400 tracking-tight leading-relaxed">{formatPrice(currentTotalPrice)}</span>
                                         </div>
                                     </div>
 
@@ -932,7 +933,7 @@ const Agenda: React.FC = () => {
                                                     onChange={(e) => setService(e.target.value)}
                                                     className="w-full rounded-xl border border-border-light dark:border-border-dark bg-background-light dark:bg-background-dark pl-10 pr-4 h-12 text-sm focus:border-primary focus:ring-1 focus:ring-primary dark:text-white outline-none transition-all appearance-none truncate"
                                                 >
-                                                    {/* DYNAMIC OPTIONS */}
+                                                    <option value="" disabled>Seleccione un servicio...</option>
                                                     {Array.from(new Set(services.map(s => s.category))).map(cat => (
                                                         <optgroup key={cat} label={cat}>
                                                             {services.filter(s => s.category === cat).map(s => (
@@ -946,7 +947,7 @@ const Agenda: React.FC = () => {
 
                                             {!service.includes('Retiro') && !service.includes('Corte') && !service.includes('Masaje') && !service.includes('Depilación') && !service.includes('Epilación') && (
                                                 <div className="mt-2 p-3 bg-gray-50 dark:bg-card-dark rounded-xl border border-dashed border-gray-200 dark:border-gray-700">
-                                                    <span className="block text-xs font-bold text-text-sec-light dark:text-text-sec-dark uppercase mb-2">¿Incluir Retiro? (+30m)</span>
+                                                    <span className="block text-xs font-bold text-text-sec-light dark:text-text-sec-dark uppercase mb-2">¿Necesitas Retiro? (+30m)</span>
                                                     <div className="grid grid-cols-2 gap-2">
                                                         <button
                                                             type="button"
@@ -1016,13 +1017,13 @@ const Agenda: React.FC = () => {
 
                                     <div className="border-t border-border-light dark:border-border-dark my-1"></div>
 
-                                    {/* Date Selection Grid */}
+                                    {/* Date Selection Grid - FIXED UI */}
                                     <div className="flex flex-col gap-2">
                                         <label className="text-sm font-bold text-text-main-light dark:text-text-main-dark flex items-center gap-2">
                                             <span className="material-symbols-outlined text-primary text-[18px]">calendar_month</span>
                                             Selecciona Fecha Disponible
                                         </label>
-                                        <div className="flex overflow-x-auto gap-2 pb-2 scrollbar-hide snap-x">
+                                        <div className="flex overflow-x-auto gap-3 pb-4 scrollbar-hide snap-x min-h-[100px] items-center">
                                             {availableDays.length > 0 ? (
                                                 availableDays.map((date, idx) => (
                                                     <button
@@ -1034,7 +1035,7 @@ const Agenda: React.FC = () => {
                                                             : 'bg-white dark:bg-card-dark border-border-light dark:border-border-dark hover:border-primary text-text-sec-light dark:text-text-sec-dark hover:bg-primary/5'
                                                             }`}
                                                     >
-                                                        <span className="text-xs font-medium uppercase">{date.toLocaleDateString('es-ES', { weekday: 'short' })}</span>
+                                                        <span className="text-[10px] font-bold uppercase tracking-tighter">{date.toLocaleDateString('es-ES', { weekday: 'short' })}</span>
                                                         <span className="text-xl font-black mt-1">{date.getDate()}</span>
                                                     </button>
                                                 ))
@@ -1047,21 +1048,19 @@ const Agenda: React.FC = () => {
                                     </div>
 
                                     {/* Time Selection Grid */}
-                                    <div className={`flex flex-col gap-2 transition-opacity duration-300 ${selectedDate ? 'opacity-100' : 'opacity-50 pointer-events-none'}`}>
+                                    <div className={`flex flex-col gap-4 transition-opacity duration-300 ${selectedDate ? 'opacity-100' : 'opacity-50 pointer-events-none'}`}>
                                         <div className="flex items-center justify-between">
                                             <label className="text-sm font-bold text-text-main-light dark:text-text-main-dark flex items-center gap-2">
                                                 <span className="material-symbols-outlined text-primary text-[18px]">schedule</span>
                                                 Selecciona Hora
-                                                {!selectedDate && <span className="text-xs font-normal text-red-500 ml-2">(Elige una fecha primero)</span>}
-                                                {/* Display Estimated Duration */}
-                                                <span className="text-xs font-bold bg-blue-100 text-blue-700 px-2 py-0.5 rounded ml-2">Duración: {formatDuration(currentDurationMinutes)}</span>
+                                                {!selectedDate && <span className="text-[10px] font-normal text-red-500 ml-2">(Elige una fecha primero)</span>}
+                                                <span className="text-[10px] font-bold bg-blue-100 text-blue-700 px-2 py-0.5 rounded ml-2">Duración: {formatDuration(currentDurationMinutes)}</span>
                                             </label>
 
                                             {/* Leyenda de Disponibilidad */}
                                             <div className="flex gap-3 text-[10px] text-text-sec-light dark:text-text-sec-dark">
                                                 <div className="flex items-center gap-1"><span className="size-2 rounded-full bg-white border border-gray-300"></span>Libre</div>
                                                 <div className="flex items-center gap-1"><span className="size-2 rounded-full bg-primary"></span>Elegido</div>
-                                                <div className="flex items-center gap-1"><span className="size-2 rounded-full bg-gray-100 dark:bg-gray-700 border border-gray-200"></span>Ocupado</div>
                                             </div>
                                         </div>
 
@@ -1085,33 +1084,32 @@ const Agenda: React.FC = () => {
                                                                 }`}
                                                         >
                                                             {time}
-                                                            {isOccupied && <span className="absolute inset-0 flex items-center justify-center bg-gray-200/50 dark:bg-black/50"><span className="material-symbols-outlined text-xs">block</span></span>}
                                                         </button>
                                                     );
                                                 })
                                             ) : (
                                                 selectedDate && (
-                                                    <div className="col-span-4 text-center py-4 text-sm text-orange-500 bg-orange-50 dark:bg-orange-900/20 rounded-xl border border-orange-100 dark:border-orange-900/30">
-                                                        No hay horarios disponibles para este día con la duración requerida ({formatDuration(currentDurationMinutes)}).
+                                                    <div className="col-span-4 text-center py-4 text-xs font-bold text-orange-500 bg-orange-50 dark:bg-orange-900/20 rounded-xl border border-orange-100 dark:border-orange-900/30">
+                                                        No hay horarios disponibles.
                                                     </div>
                                                 )
                                             )}
                                         </div>
                                     </div>
 
-                                    <div className="flex gap-3 mt-4 pt-4 border-t border-border-light dark:border-border-dark">
+                                    <div className="flex gap-3 mt-4 pt-6 border-t border-border-light dark:border-border-dark">
                                         <button
                                             type="button"
                                             onClick={resetModal}
                                             disabled={isSubmitting}
-                                            className="flex-1 py-3 rounded-xl font-bold text-text-sec-light dark:text-text-sec-dark hover:bg-background-light dark:hover:bg-background-dark transition-colors disabled:opacity-50"
+                                            className="flex-1 py-4 rounded-xl font-bold text-text-sec-light hover:bg-gray-100 dark:hover:bg-slate-800 transition-colors"
                                         >
                                             Cancelar
                                         </button>
                                         <button
                                             type="submit"
-                                            disabled={!selectedDate || !selectedTime || !clientName || !clientEmail || clientPhone.length < 10 || !selectedProfessionalId || isSubmitting}
-                                            className="flex-1 py-3 rounded-xl bg-primary text-white font-bold hover:bg-primary/90 transition-colors shadow-lg shadow-primary/20 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                                            disabled={!selectedDate || !selectedTime || !service || !clientName || !clientEmail || clientPhone.length < 10 || !selectedProfessionalId || isSubmitting}
+                                            className="flex-1 py-4 bg-primary text-white rounded-xl font-bold shadow-lg hover:bg-primary/90 transition-all active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 h-14"
                                         >
                                             {isSubmitting ? (
                                                 <>
