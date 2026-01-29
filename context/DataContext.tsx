@@ -56,6 +56,20 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     });
 
     useEffect(() => {
+        // --- 1. Load from Cache immediately (Instant visual load) ---
+        const loadCache = () => {
+            const cachedServices = localStorage.getItem('beautymanager_services');
+            const cachedPros = localStorage.getItem('beautymanager_pros');
+            const cachedAppts = localStorage.getItem('beautymanager_appts');
+            const cachedClients = localStorage.getItem('beautymanager_clients');
+
+            if (cachedServices) setServices(JSON.parse(cachedServices));
+            if (cachedPros) setProfessionals(JSON.parse(cachedPros));
+            if (cachedAppts) setAppointments(JSON.parse(cachedAppts));
+            if (cachedClients) setClients(JSON.parse(cachedClients));
+        };
+        loadCache();
+
         if (!session || !role || !profile) return;
 
         setUserProfile(prev => ({
@@ -71,23 +85,42 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         }));
 
         const fetchData = async () => {
-            // 0. Fetch Services (Visible to all)
-            const { data: servicesData } = await supabase.from('services').select('*').order('category', { ascending: true });
-            if (servicesData) {
-                setServices(servicesData.map((s: any) => ({
+            console.log("Fetching data started...");
+            const startTime = performance.now();
+
+            // --- Phase 1: Fetch Base Data (Parallel) ---
+            // Services, Professionals, and "MyClient" ID (if client) can be fetched simultaneously
+            const servicesPromise = supabase.from('services').select('*').order('category', { ascending: true });
+            const prosPromise = supabase.from('professionals').select('*');
+
+            // If client, fetch self-id early
+            const myClientIdPromise = role === 'client'
+                ? supabase.from('clients').select('id').eq('email', session.user.email).limit(1).single()
+                : Promise.resolve({ data: null, error: null });
+
+            const [servicesResult, prosResult, myClientResult] = await Promise.all([
+                servicesPromise,
+                prosPromise,
+                myClientIdPromise
+            ]);
+
+            // Process Services
+            if (servicesResult.data) {
+                const mappedServices = servicesResult.data.map((s: any) => ({
                     id: s.id,
                     name: s.name,
                     price: s.price,
                     duration: s.duration,
                     category: s.category
-                })));
+                }));
+                setServices(mappedServices);
+                localStorage.setItem('beautymanager_services', JSON.stringify(mappedServices));
             }
 
-            // 1. Fetch Professionals (Visible to all)
-            const { data: prosData } = await supabase.from('professionals').select('*');
+            // Process Professionals
             let mappedPros: Professional[] = [];
-            if (prosData) {
-                mappedPros = prosData.map((p: any) => ({
+            if (prosResult.data) {
+                mappedPros = prosResult.data.map((p: any) => ({
                     id: p.id,
                     name: p.name,
                     role: p.role,
@@ -97,39 +130,50 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
                     profileId: p.profile_id
                 }));
                 setProfessionals(mappedPros);
+                localStorage.setItem('beautymanager_pros', JSON.stringify(mappedPros));
             }
 
-            // 2. Fetch Appointments (Role restricted)
+            // Determine IDs for Appointments query
+            let currentClientId: number | undefined;
+            if (role === 'client' && myClientResult?.data) {
+                currentClientId = myClientResult.data.id;
+            }
+
+            // --- Phase 2: Fetch Appointments (Dependent on Pros/Client ID) ---
             let apptsQuery = supabase.from('appointments').select(`
                 *,
                 clients (name, avatar),
                 professionals (name)
             `);
 
-            let currentClientId: number | undefined;
-
             if (role === 'professional') {
-                const myPro = mappedPros.find(p => p.email.toLowerCase() === session.user.email?.toLowerCase());
+                const myPro = mappedPros.find(p => p.email?.toLowerCase() === session.user.email?.toLowerCase());
                 if (myPro) {
                     apptsQuery = apptsQuery.eq('professional_id', myPro.id);
                 } else {
+                    // Fallback if not found yet (shouldn't happen if profile sync works)
                     apptsQuery = apptsQuery.eq('id', -1);
                 }
-            } else if (role === 'client') {
-                const { data: myClient } = await supabase.from('clients').select('id').eq('email', session.user.email).limit(1).single();
-                if (myClient) currentClientId = myClient.id;
             }
+            // Note: Clients see ONLY their own appointments? Or all but anonymized?
+            // Existing logic seemed to fetch ALL and then filter/anonymize in memory.
+            // But optimal way is to just fetch what's needed. However, to see "busy" slots, 
+            // clients need to see OTHER appointments too, but obscured.
+            // So we fetch ALL appointments (or filtered by date range if optimization needed later).
 
             const { data: apptsData } = await apptsQuery;
 
+            let finalAppointments: Appointment[] = [];
+
             if (apptsData) {
-                const mappedAppts = apptsData.map((a: any) => {
+                finalAppointments = apptsData.map((a: any) => {
                     let isOwn = true;
                     if (role === 'client') {
                         isOwn = currentClientId !== undefined && a.client_id === currentClientId;
                     }
 
                     if (role === 'client' && !isOwn) {
+                        // Anonymized for other clients
                         return {
                             id: a.id,
                             time: a.time || (a.date ? new Date(a.date).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : ''),
@@ -161,13 +205,37 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
                         price: a.price ? `$${a.price}` : undefined
                     };
                 });
-                setAppointments(mappedAppts);
 
-                // 3. Fetch Clients (Admin or Professional)
-                if (role === 'admin') {
-                    const { data: clientsData } = await supabase.from('clients').select('*').order('created_at', { ascending: false });
+                setAppointments(finalAppointments);
+                localStorage.setItem('beautymanager_appts', JSON.stringify(finalAppointments));
+            }
+
+            // --- Phase 3: Fetch Clients (Dependent on Role & Appointments for Pros) ---
+            if (role === 'admin') {
+                const { data: clientsData } = await supabase.from('clients').select('*').order('created_at', { ascending: false });
+                if (clientsData) {
+                    const mappedClients: Client[] = clientsData.map((c: any) => ({
+                        id: c.id,
+                        name: c.name,
+                        email: c.email,
+                        phone: c.phone,
+                        avatar: c.avatar || c.avatar_url || `https://ui-avatars.com/api/?name=${encodeURIComponent(c.name)}&background=random`,
+                        lastVisit: c.last_visit ? new Date(c.last_visit).toLocaleDateString() : 'Nuevo',
+                        isNew: false,
+                        role: c.role,
+                        profileId: c.profile_id
+                    }));
+                    setClients(mappedClients);
+                    localStorage.setItem('beautymanager_clients', JSON.stringify(mappedClients));
+                }
+            } else if (role === 'professional' && apptsData) {
+                // Extract unique client IDs from appointments we just loaded
+                const clientIds = Array.from(new Set(apptsData.map((a: any) => a.client_id).filter((id: any) => id !== null)));
+
+                if (clientIds.length > 0) {
+                    const { data: clientsData } = await supabase.from('clients').select('*').in('id', clientIds);
                     if (clientsData) {
-                        setClients(clientsData.map((c: any) => ({
+                        const mappedClients: Client[] = clientsData.map((c: any) => ({
                             id: c.id,
                             name: c.name,
                             email: c.email,
@@ -177,37 +245,22 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
                             isNew: false,
                             role: c.role,
                             profileId: c.profile_id
-                        })));
-                    }
-                } else if (role === 'professional') {
-                    // Extract unique client IDs from appointments we just loaded
-                    const clientIds = Array.from(new Set(apptsData.map((a: any) => a.client_id).filter(id => id !== null)));
-                    if (clientIds.length > 0) {
-                        const { data: clientsData } = await supabase.from('clients').select('*').in('id', clientIds);
-                        if (clientsData) {
-                            setClients(clientsData.map((c: any) => ({
-                                id: c.id,
-                                name: c.name,
-                                email: c.email,
-                                phone: c.phone,
-                                avatar: c.avatar || c.avatar_url || `https://ui-avatars.com/api/?name=${encodeURIComponent(c.name)}&background=random`,
-                                lastVisit: c.last_visit ? new Date(c.last_visit).toLocaleDateString() : 'Nuevo',
-                                isNew: false,
-                                role: c.role,
-                                profileId: c.profile_id
-                            })));
-                        } else {
-                            setClients([]);
-                        }
+                        }));
+                        setClients(mappedClients);
+                        localStorage.setItem('beautymanager_clients', JSON.stringify(mappedClients));
                     } else {
                         setClients([]);
+                        localStorage.setItem('beautymanager_clients', JSON.stringify([]));
                     }
                 } else {
                     setClients([]);
+                    localStorage.setItem('beautymanager_clients', JSON.stringify([]));
                 }
             } else {
+                // Clients or others don't see client list
                 setClients([]);
             }
+            console.log(`Fetch completed in ${performance.now() - startTime}ms`);
         };
 
         fetchData();

@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { APP_VERSION } from '../constants';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { MenuItem } from '../types';
 import ChatBot from './ChatBot';
@@ -106,7 +107,7 @@ const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
                             <span className="text-sm font-bold">Cerrar Sesión</span>
                         </button>
                         <div className="text-center">
-                            <span className="text-[10px] font-bold text-gray-300 dark:text-slate-600 uppercase tracking-widest">Version 1.1.2</span>
+                            <span className="text-[10px] font-bold text-gray-300 dark:text-slate-600 uppercase tracking-widest">Version {APP_VERSION}</span>
                         </div>
                     </div>
                 </div>
@@ -169,7 +170,7 @@ const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
                             <span className="text-sm font-bold">Cerrar Sesión</span>
                         </button>
                         <div className="text-center">
-                            <span className="text-[10px] font-bold text-gray-400 dark:text-slate-600 uppercase tracking-widest">Version 1.1.2</span>
+                            <span className="text-[10px] font-bold text-gray-400 dark:text-slate-600 uppercase tracking-widest">Version {APP_VERSION}</span>
                         </div>
                     </div>
                 </div>

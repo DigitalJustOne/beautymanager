@@ -1,5 +1,6 @@
 
 import React, { useState } from 'react';
+import { APP_VERSION } from '../constants';
 import { supabase } from '../services/supabase';
 import { useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
@@ -186,7 +187,7 @@ const Login: React.FC = () => {
                     >
                         {isRegistering ? '¿Ya tienes cuenta? Inicia sesión' : '¿No tienes cuenta? Regístrate'}
                     </button>
-                    <span className="text-[10px] font-bold text-gray-300 dark:text-slate-600 uppercase tracking-widest">Version 1.1.4</span>
+                    <span className="text-[10px] font-bold text-gray-300 dark:text-slate-600 uppercase tracking-widest">Version {APP_VERSION}</span>
                 </div>
             </div>
         </div>
