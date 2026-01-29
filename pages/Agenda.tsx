@@ -1132,6 +1132,8 @@ const Agenda: React.FC = () => {
                     </div>
                 )
             }
+        </div>
+    );
+};
 
-
-            export default Agenda;
+export default Agenda;
