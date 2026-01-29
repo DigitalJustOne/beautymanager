@@ -19,6 +19,16 @@ const BookingModal: React.FC<BookingModalProps> = ({
     initialDate,
     initialProfessionalId
 }) => {
+    const defaultSchedule = [
+        { day: 'Lunes', enabled: true, start: '09:00', end: '19:00' },
+        { day: 'Martes', enabled: true, start: '09:00', end: '19:00' },
+        { day: 'Miércoles', enabled: true, start: '09:00', end: '19:00' },
+        { day: 'Jueves', enabled: true, start: '09:00', end: '19:00' },
+        { day: 'Viernes', enabled: true, start: '09:00', end: '19:00' },
+        { day: 'Sábado', enabled: true, start: '09:00', end: '17:00' },
+        { day: 'Domingo', enabled: false, start: '09:00', end: '14:00' }
+    ];
+
     const {
         services,
         professionals,
@@ -129,7 +139,7 @@ const BookingModal: React.FC<BookingModalProps> = ({
     const availableDays = useMemo(() => {
         if (!selectedProfessionalId) return [];
         const pro = professionals.find(p => p.id === Number(selectedProfessionalId));
-        if (!pro || !pro.schedule) return [];
+        const schedule = pro?.schedule || defaultSchedule;
 
         const days = [];
         const today = new Date();
@@ -137,7 +147,7 @@ const BookingModal: React.FC<BookingModalProps> = ({
             const d = new Date();
             d.setDate(today.getDate() + i);
             const dayName = d.toLocaleDateString('es-ES', { weekday: 'long' });
-            const scheduleDay = pro.schedule.find(s => s.day.toLowerCase() === dayName.toLowerCase());
+            const scheduleDay = schedule.find((s: any) => s.day.toLowerCase() === dayName.toLowerCase());
             if (scheduleDay && scheduleDay.enabled) {
                 days.push(d);
             }
@@ -148,10 +158,10 @@ const BookingModal: React.FC<BookingModalProps> = ({
     const timeSlots = useMemo(() => {
         if (!selectedDate || !selectedProfessionalId) return [];
         const pro = professionals.find(p => p.id === Number(selectedProfessionalId));
-        if (!pro || !pro.schedule) return [];
+        const schedule = pro?.schedule || defaultSchedule;
 
         const dayName = selectedDate.toLocaleDateString('es-ES', { weekday: 'long' });
-        const scheduleDay = pro.schedule.find(s => s.day.toLowerCase() === dayName.toLowerCase());
+        const scheduleDay = schedule.find((s: any) => s.day.toLowerCase() === dayName.toLowerCase());
         if (!scheduleDay || !scheduleDay.enabled) return [];
 
         const [startHour, startMin] = scheduleDay.start.split(':').map(Number);
@@ -345,7 +355,7 @@ const BookingModal: React.FC<BookingModalProps> = ({
                                 <div className="absolute inset-0 bg-green-500/5 translate-y-full group-hover:translate-y-0 transition-transform duration-700"></div>
                                 <div className="text-center relative z-10">
                                     <span className="block text-[10px] font-black text-green-600/60 dark:text-green-400/60 uppercase tracking-[0.3em] mb-2">Valor Estimado del Servicio</span>
-                                    <span className="block text-6xl font-black text-green-600 dark:text-green-500 tracking-tighter leading-none">{formatPrice(currentTotalPrice)}</span>
+                                    <span className="block text-4xl md:text-6xl font-black text-green-600 dark:text-green-500 tracking-tighter leading-none">{formatPrice(currentTotalPrice)}</span>
                                 </div>
                             </div>
 
@@ -384,7 +394,7 @@ const BookingModal: React.FC<BookingModalProps> = ({
                                                 onChange={handlePhoneChange}
                                                 readOnly={userRole === 'client'}
                                                 placeholder="Ej: 3001234567"
-                                                className={`w-full rounded-2xl border-2 border-slate-100 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900 pl-12 pr-4 h-14 text-base font-bold outline-none transition-all dark:text-white ${userRole === 'client' ? 'opacity-70 grayscale bg-slate-200' : 'focus:border-primary focus:bg-white dark:focus:border-primary/50'}`}
+                                                className={`w-full rounded-2xl border-2 border-slate-100 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900 pl-11 pr-3 md:pl-12 md:pr-4 h-14 text-sm md:text-base font-bold outline-none transition-all dark:text-white ${userRole === 'client' ? 'opacity-70 grayscale bg-slate-200' : 'focus:border-primary focus:bg-white dark:focus:border-primary/50'}`}
                                             />
                                         </div>
                                     </div>
@@ -399,7 +409,7 @@ const BookingModal: React.FC<BookingModalProps> = ({
                                                 onChange={(e) => setClientEmail(e.target.value)}
                                                 readOnly={userRole === 'client'}
                                                 placeholder="cliente@correo.com"
-                                                className={`w-full rounded-2xl border-2 border-slate-100 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900 pl-12 pr-4 h-14 text-base font-bold outline-none transition-all dark:text-white ${userRole === 'client' ? 'opacity-70 grayscale bg-slate-200' : 'focus:border-primary focus:bg-white dark:focus:border-primary/50'}`}
+                                                className={`w-full rounded-2xl border-2 border-slate-100 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900 pl-11 pr-3 md:pl-12 md:pr-4 h-14 text-sm md:text-base font-bold outline-none transition-all dark:text-white ${userRole === 'client' ? 'opacity-70 grayscale bg-slate-200' : 'focus:border-primary focus:bg-white dark:focus:border-primary/50'}`}
                                             />
                                         </div>
                                     </div>
