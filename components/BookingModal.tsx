@@ -1,6 +1,6 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { useData } from '../context/DataContext';
-import { formatPrice, formatDuration } from '../utils/format';
+import { formatPrice, formatDuration, parseDuration } from '../utils/format';
 
 interface BookingModalProps {
     isOpen: boolean;
@@ -203,7 +203,7 @@ const BookingModal: React.FC<BookingModalProps> = ({
             if (appt.date?.toDateString() !== selectedDate.toDateString()) return false;
 
             const apptStart = appt.time.split(':').reduce((acc, curr, i) => acc + Number(curr) * (i === 0 ? 60 : 1), 0);
-            const apptDuration = (appt.duration && appt.duration.includes('h')) ? 90 : parseInt(appt.duration || '60');
+            const apptDuration = parseDuration(appt.duration);
             const apptEnd = apptStart + apptDuration;
 
             return (startMin < apptEnd && endMin > apptStart);
@@ -245,7 +245,7 @@ const BookingModal: React.FC<BookingModalProps> = ({
                 time: selectedTime,
                 duration: formatDuration(currentDurationMinutes),
                 price: formatPrice(currentTotalPrice),
-                status: 'confirmed' as const,
+                status: (userRole === 'client' ? 'pending' : 'confirmed') as 'pending' | 'confirmed' | 'cancelled' | 'completed' | 'in_progress',
                 professionalId: Number(selectedProfessionalId),
                 professionalName: pro?.name || 'Especialista',
                 avatar: existingClient?.avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(clientName)}&background=random`

@@ -13,10 +13,10 @@ const ClientDetailsModal: React.FC<ClientDetailsModalProps> = ({ isOpen, onClose
 
     return (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4 animate-in fade-in duration-200" onClick={onClose}>
-            <div className="bg-white dark:bg-[#1e293b] rounded-3xl shadow-2xl w-full max-w-sm overflow-hidden border border-slate-200 dark:border-slate-800 animate-in zoom-in-95 duration-200 relative" onClick={(e) => e.stopPropagation()}>
+            <div className="bg-white dark:bg-[#1e293b] rounded-3xl shadow-2xl w-full max-w-sm max-h-[90vh] overflow-hidden border border-slate-200 dark:border-slate-800 animate-in zoom-in-95 duration-200 relative flex flex-col" onClick={(e) => e.stopPropagation()}>
 
                 {/* Header with Close Button */}
-                <div className="h-28 bg-primary relative flex justify-center items-center">
+                <div className="h-28 bg-primary relative flex justify-center items-center shrink-0">
                     <button
                         onClick={onClose}
                         className="absolute top-4 right-4 bg-black/20 hover:bg-black/40 text-white rounded-full p-1.5 transition-colors backdrop-blur-sm"
@@ -26,7 +26,7 @@ const ClientDetailsModal: React.FC<ClientDetailsModalProps> = ({ isOpen, onClose
                     <span className="text-white/20 font-black text-5xl select-none absolute bottom-[-10px]">CLIENTE</span>
                 </div>
 
-                <div className="px-6 pb-8 relative bg-white dark:bg-[#1e293b]">
+                <div className="px-6 pb-8 pt-2 relative bg-white dark:bg-[#1e293b] overflow-y-auto">{/* Added overflow-y-auto and pt-2 */}
                     {/* Avatar */}
                     <div className="flex flex-col items-center -mt-12 mb-4 relative z-10">
                         <div className="size-24 rounded-full border-[5px] border-white dark:border-[#1e293b] bg-cover bg-center bg-gray-200 shadow-md" style={{ backgroundImage: `url("${client.avatar}")` }}></div>
@@ -37,8 +37,8 @@ const ClientDetailsModal: React.FC<ClientDetailsModalProps> = ({ isOpen, onClose
                         <h3 className="text-2xl font-black text-slate-800 dark:text-white capitalize leading-tight">{client.name}</h3>
                         <div className="flex items-center justify-center gap-2 mt-2">
                             <span className={`px-4 py-1.5 rounded-full text-[10px] font-black uppercase tracking-widest ${client.role === 'admin' ? 'bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400' :
-                                    client.role === 'professional' ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400' :
-                                        'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400'
+                                client.role === 'professional' ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400' :
+                                    'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400'
                                 }`}>
                                 {client.role === 'admin' ? 'Administrador' : client.role === 'professional' ? 'Profesional' : 'Cliente'}
                             </span>
@@ -78,6 +78,32 @@ const ClientDetailsModal: React.FC<ClientDetailsModalProps> = ({ isOpen, onClose
                                 <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Última Visita</p>
                                 <p className="font-bold text-sm text-slate-700 dark:text-slate-200">{client.lastVisit || 'Sin registros'}</p>
                             </div>
+                        </div>
+                    </div>
+
+                    {/* Contact Buttons */}
+                    <div className="mb-6">
+                        <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-3 text-center">Contactar Cliente</p>
+                        <div className="grid grid-cols-2 gap-3">
+                            <button
+                                onClick={() => window.location.href = `tel:${client.phone}`}
+                                className="flex items-center justify-center gap-2 py-3 bg-blue-50 hover:bg-blue-100 text-blue-600 dark:bg-blue-900/20 dark:hover:bg-blue-900/30 dark:text-blue-400 rounded-2xl font-bold transition-all active:scale-95"
+                            >
+                                <span className="material-symbols-outlined text-lg">call</span>
+                                <span className="text-sm">Llamar</span>
+                            </button>
+                            <button
+                                onClick={() => {
+                                    const message = encodeURIComponent(`Hola ${client.name}, te contacto desde Beauty Manager.`);
+                                    window.open(`https://wa.me/57${client.phone}?text=${message}`, '_blank');
+                                }}
+                                className="flex items-center justify-center gap-2 py-3 bg-green-50 hover:bg-green-100 text-green-600 dark:bg-green-900/20 dark:hover:bg-green-900/30 dark:text-green-400 rounded-2xl font-bold transition-all active:scale-95"
+                            >
+                                <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
+                                    <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413Z" />
+                                </svg>
+                                <span className="text-sm">WhatsApp</span>
+                            </button>
                         </div>
                     </div>
 

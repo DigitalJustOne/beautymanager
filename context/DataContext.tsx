@@ -129,7 +129,7 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
             // Prepare Appointments Query
             let apptsQuery = supabase.from('appointments').select(`
                 *,
-                clients (name, avatar),
+                clients (name, avatar, phone),
                 professionals (name)
             `);
 
@@ -234,7 +234,9 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
                             date: new Date(a.date),
                             professionalId: a.professional_id,
                             professionalName: a.professionals?.name,
-                            price: a.price ? `$${a.price}` : undefined
+                            price: a.price ? `$${a.price}` : undefined,
+                            phone: a.clients?.phone || null, // Add phone from join
+                            clientId: a.client_id
                         };
                     });
 

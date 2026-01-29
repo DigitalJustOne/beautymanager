@@ -1,194 +1,40 @@
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useData } from '../context/DataContext';
 import { Appointment, Client } from '../types';
-import { generateGoogleCalendarUrl } from '../services/calendarService';
-import { formatPrice, formatDuration } from '../utils/format';
 import AppointmentDetailsModal from '../components/AppointmentDetailsModal';
+import BookingModal from '../components/BookingModal';
 
 const Dashboard: React.FC = () => {
     const navigate = useNavigate();
-    const { appointments, clients, professionals, services, addAppointment, addClient, updateAppointmentStatus, deleteAppointment, userProfile } = useData();
+    const { appointments, clients, updateAppointmentStatus, deleteAppointment, userProfile } = useData();
 
     // Estados Modales
-    const [isModalOpen, setIsModalOpen] = useState(false);
+    const [isBookingModalOpen, setIsBookingModalOpen] = useState(false);
     const [isPendingModalOpen, setIsPendingModalOpen] = useState(false);
-    const [selectedAppointment, setSelectedAppointment] = useState<Appointment | null>(null); // Para ver detalles desde el Dashboard
+    const [selectedAppointment, setSelectedAppointment] = useState<Appointment | null>(null);
 
     // Estado para el menú desplegable de cada cita
     const [openMenuId, setOpenMenuId] = useState<number | null>(null);
 
-    // Estado del formulario
-    const [clientName, setClientName] = useState('');
-    const [clientPhone, setClientPhone] = useState('');
-    const [clientEmail, setClientEmail] = useState('');
-    const [service, setService] = useState('');
-    const [selectedProfessionalId, setSelectedProfessionalId] = useState<number | ''>('');
-    const [isSubmitting, setIsSubmitting] = useState(false);
-    const [selectedDate, setSelectedDate] = useState<Date | null>(null);
-    const [selectedTime, setSelectedTime] = useState<string | null>(null);
-    const [formError, setFormError] = useState<string | null>(null);
+    // --- HELPERS PARA CITAS ---
+    const pendingAppointments = useMemo(() =>
+        appointments.filter(a => a.status === 'pending'),
+        [appointments]
+    );
 
-    // NUEVO: Estado para el tipo de retiro (string vacío = no retiro)
-    const [removalType, setRemovalType] = useState<'' | 'semi' | 'acrylic' | 'feet'>('');
-
-    // NUEVO: Estado para éxito después de agendar
-    const [successLink, setSuccessLink] = useState<string | null>(null);
-    const [bookedApptDetails, setBookedApptDetails] = useState<Appointment | null>(null);
-
-    // Resetear la hora seleccionada cuando cambia la fecha, servicio o retiro
-    useEffect(() => {
-        setSelectedTime(null);
-        setFormError(null);
-    }, [selectedDate, selectedProfessionalId, removalType, service]);
-
-    // Filtrar profesionales
-    const availableProfessionals = useMemo(() => {
-        if (!service) return professionals;
-        return professionals.filter(p => p.specialties.includes(service));
-    }, [professionals, service]);
-
-    // Resetear profesional si cambia el servicio
-    useEffect(() => {
-        if (selectedProfessionalId) {
-            const pro = professionals.find(p => p.id === selectedProfessionalId);
-            if (pro && !pro.specialties.includes(service)) {
-                setSelectedProfessionalId('');
-            }
-        }
-    }, [service, professionals, selectedProfessionalId]);
-
-
-    // Generar días disponibles
-    const availableDays = useMemo(() => {
-        const days = [];
-        const today = new Date();
-        for (let i = 0; i < 14; i++) {
-            const d = new Date(today);
-            d.setDate(today.getDate() + i);
-            const dayName = d.toLocaleDateString('es-ES', { weekday: 'long' });
-            const scheduleDay = userProfile.schedule.find(s => s.day.toLowerCase() === dayName.toLowerCase());
-            if (scheduleDay && scheduleDay.enabled) {
-                days.push(d);
-            }
-        }
-        return days;
-    }, [userProfile.schedule]);
-
-    // Helper de Precios Dinámicos
-    const getServiceBasePrice = (serviceName: string): number => {
-        const found = services.find(s => s.name === serviceName);
-        return found ? found.price : 0;
+    const handleUpdateStatus = async (id: number, status: 'confirmed' | 'pending' | 'cancelled') => {
+        await updateAppointmentStatus(id, status);
+        setOpenMenuId(null);
     };
 
-    // Calcular precio TOTAL (Base + Retiro específico)
-    const currentTotalPrice = useMemo(() => {
-        let price = getServiceBasePrice(service);
-        if (removalType === 'semi') price += 10000;
-        if (removalType === 'acrylic') price += 15000;
-        if (removalType === 'feet') price += 8000;
-        return price;
-    }, [service, removalType, services]);
-
-    // Helper Duración Dinámica
-    const getServiceBaseMinutes = (serviceName: string) => {
-        const found = services.find(s => s.name === serviceName);
-        return found ? found.duration : 60;
+    const handleDeleteForever = async (id: number) => {
+        if (confirm('¿Estás seguro de eliminar esta cita permanentemente?')) {
+            await deleteAppointment(id);
+            setOpenMenuId(null);
+        }
     };
 
-    const currentDurationMinutes = useMemo(() => {
-        let minutes = getServiceBaseMinutes(service);
-        if (removalType && !service.includes('Retiro') && !service.includes('Corte') && !service.includes('Masaje') && !service.includes('Depilación') && !service.includes('Epilación')) {
-            minutes += 30;
-        }
-        return minutes;
-    }, [service, removalType, services]);
-
-
-
-    // Slots de tiempo
-    const timeSlots = useMemo(() => {
-        if (!selectedDate) return [];
-        const dayName = selectedDate.toLocaleDateString('es-ES', { weekday: 'long' });
-        const scheduleDay = userProfile.schedule.find(s => s.day.toLowerCase() === dayName.toLowerCase());
-        if (!scheduleDay || !scheduleDay.enabled) return [];
-
-        const [startHour, startMin] = scheduleDay.start.split(':').map(Number);
-        const [endHour, endMin] = scheduleDay.end.split(':').map(Number);
-
-        const slots = [];
-        let currentTotalMinutes = startHour * 60 + startMin;
-        const endTotalMinutes = endHour * 60 + endMin;
-        const step = 30;
-
-        while (currentTotalMinutes + currentDurationMinutes <= endTotalMinutes) {
-            const h = Math.floor(currentTotalMinutes / 60);
-            const m = currentTotalMinutes % 60;
-            const timeString = `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}`;
-            slots.push(timeString);
-            currentTotalMinutes += step;
-        }
-
-        const now = new Date();
-        const isToday = selectedDate.getDate() === now.getDate() &&
-            selectedDate.getMonth() === now.getMonth() &&
-            selectedDate.getFullYear() === now.getFullYear();
-
-        if (isToday) {
-            const currentHourNow = now.getHours();
-            const currentMinNow = now.getMinutes();
-            return slots.filter(slot => {
-                const [h, m] = slot.split(':').map(Number);
-                return h > currentHourNow || (h === currentHourNow && m > currentMinNow);
-            });
-        }
-        return slots;
-    }, [selectedDate, userProfile.schedule, currentDurationMinutes]);
-
-    // Detectar cliente
-    const existingClient = useMemo(() => {
-        if (clientPhone.length < 10) return null;
-        return clients.find(c => c.phone === clientPhone);
-    }, [clientPhone, clients]);
-
-    // Recuperar info completa del cliente para el modal de detalles
-    const getClientInfo = (clientName: string): Client | undefined => {
-        return clients.find(c => c.name.toLowerCase() === clientName.toLowerCase());
-    };
-
-    // Validación Conflictos
-    const normalizeDate = (d: Date) => new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
-
-    const isSlotOccupied = (timeToCheck: string) => {
-        if (!selectedProfessionalId || !selectedDate) return false;
-        const targetDate = normalizeDate(selectedDate);
-        const targetProId = Number(selectedProfessionalId);
-        const [checkH, checkM] = timeToCheck.split(':').map(Number);
-        const newStart = checkH * 60 + checkM;
-        const newEnd = newStart + currentDurationMinutes;
-
-        return appointments.some(appt => {
-            if (appt.status === 'cancelled') return false;
-            if (appt.professionalId !== targetProId) return false;
-            if (!appt.date) return false;
-            const apptDate = normalizeDate(new Date(appt.date));
-            if (apptDate !== targetDate) return false;
-
-            const [existH, existM] = appt.time.split(':').map(Number);
-            const existStart = existH * 60 + existM;
-            let existDuration = 60;
-            const hMatch = appt.duration.match(/(\d+)h/);
-            const mMatch = appt.duration.match(/(\d+)m/);
-            if (hMatch) existDuration = parseInt(hMatch[1]) * 60;
-            if (mMatch) existDuration += parseInt(mMatch[1]);
-            else if (!hMatch && !mMatch) existDuration = 60;
-
-            const existEnd = existStart + existDuration;
-            return (newStart < existEnd && newEnd > existStart);
-        });
-    };
-
-    // Helper Estado
     const getAppointmentStatus = (appt: Appointment) => {
         if (appt.status === 'cancelled') {
             return { label: 'Cancelado', color: 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400', icon: 'cancel' };
@@ -209,12 +55,9 @@ const Dashboard: React.FC = () => {
 
             const endTime = new Date(apptDate.getTime() + durationMinutes * 60000);
 
-            // EN SERVICIO
             if (now >= apptDate && now < endTime && appt.status === 'confirmed') {
                 return { label: 'En Servicio', color: 'bg-indigo-100 text-indigo-700 dark:bg-indigo-900/30 dark:text-indigo-400', icon: 'timelapse' };
             }
-
-            // FINALIZADO
             if (now >= endTime) {
                 return { label: 'Finalizado', color: 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400', icon: 'check_circle' };
             }
@@ -225,170 +68,22 @@ const Dashboard: React.FC = () => {
         return { label: 'Pendiente', color: 'bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400', icon: 'schedule' };
     };
 
-    // Acciones de Citas
     const toggleMenu = (id: number) => {
         setOpenMenuId(openMenuId === id ? null : id);
     };
 
-    const handleUpdateStatus = (id: number, newStatus: 'confirmed' | 'pending' | 'cancelled') => {
-        updateAppointmentStatus(id, newStatus);
-        setOpenMenuId(null);
-    };
-
-    const handleDeleteForever = (id: number) => {
-        if (window.confirm('¿Estás seguro de eliminar este registro permanentemente? Esta acción no se puede deshacer.')) {
-            deleteAppointment(id);
-        }
-        setOpenMenuId(null);
-    };
-
-    // Crear Cita
-    const handleCreateAppointment = async (e: React.FormEvent) => {
-        e.preventDefault();
-        setFormError(null);
-
-        if (!selectedDate || !selectedTime || !clientName || !clientEmail || !clientPhone || !selectedProfessionalId || isSubmitting) return;
-
-        if (clientPhone.length !== 10) {
-            setFormError("Por favor ingresa un número de celular válido de 10 dígitos.");
-            return;
-        }
-
-        if (isSlotOccupied(selectedTime)) {
-            const proName = professionals.find(p => p.id === Number(selectedProfessionalId))?.name;
-            setFormError(`El horario seleccionado (${selectedTime}) ya está ocupado para ${proName}. Por favor elige otro.`);
-            return;
-        }
-
-        setIsSubmitting(true);
-
-        try {
-            if (!existingClient) {
-                const emailOwner = clients.find(c => c.email.toLowerCase() === clientEmail.toLowerCase());
-                if (emailOwner) {
-                    setFormError(`El correo electrónico ya está registrado con el cliente "${emailOwner.name}". No se puede crear un nuevo registro.`);
-                    setIsSubmitting(false);
-                    return;
-                }
-            } else {
-                const emailOwner = clients.find(c => c.email.toLowerCase() === clientEmail.toLowerCase());
-                if (emailOwner && emailOwner.id !== existingClient.id) {
-                    setFormError(`El correo ingresado pertenece a otro cliente (${emailOwner.name}). Por favor verifique.`);
-                    setIsSubmitting(false);
-                    return;
-                }
-            }
-
-            const avatarUrl = existingClient?.avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(clientName)}&background=random`;
-            const selectedPro = professionals.find(p => p.id === Number(selectedProfessionalId));
-
-            let finalClientName = clientName;
-            let finalClientId = existingClient?.id;
-
-            if (!existingClient) {
-                const newClient = await addClient({
-                    id: Date.now(),
-                    name: clientName,
-                    email: clientEmail,
-                    phone: clientPhone,
-                    lastVisit: 'Nuevo',
-                    avatar: avatarUrl,
-                    isNew: true
-                });
-                if (newClient) finalClientId = newClient.id;
-            } else {
-                finalClientName = existingClient.name;
-            }
-
-            const finalDurationString = formatDuration(currentDurationMinutes);
-            const finalPriceString = formatPrice(currentTotalPrice);
-
-            let serviceString = service;
-            if (removalType === 'semi') serviceString += ' + Retiro Semi';
-            if (removalType === 'acrylic') serviceString += ' + Retiro Acrílico';
-            if (removalType === 'feet') serviceString += ' + Retiro Pies';
-
-            const newAppt: Appointment = {
-                id: Date.now() + 1,
-                time: selectedTime,
-                ampm: parseInt(selectedTime.split(':')[0]) >= 12 ? 'PM' : 'AM',
-                client: finalClientName,
-                clientId: finalClientId,
-                service: serviceString,
-                duration: finalDurationString,
-                price: finalPriceString,
-                avatar: avatarUrl,
-                status: 'pending',
-                date: selectedDate,
-                professionalId: selectedPro?.id,
-                professionalName: selectedPro?.name
-            };
-
-            await addAppointment(newAppt);
-
-            // Generar Link y Mostrar Éxito (SIN ALERTAS HORRIBLES - Unificado con Agenda.tsx)
-            const calendarUrl = generateGoogleCalendarUrl(newAppt);
-            setSuccessLink(calendarUrl || null);
-            setBookedApptDetails(newAppt);
-
-        } catch (error) {
-            console.error("Error creating appointment:", error);
-            setFormError("Ocurrió un error al crear la cita.");
-        } finally {
-            setIsSubmitting(false);
-        }
-    };
-
-    const resetModal = () => {
-        setIsModalOpen(false);
-        setClientName('');
-        setClientPhone('');
-        setClientEmail('');
-        setService('');
-        setRemovalType('');
-        setSelectedProfessionalId('');
-        setSelectedDate(null);
-        setSelectedTime(null);
-        setFormError(null);
-        setSuccessLink(null);
-        setBookedApptDetails(null);
-    };
-
-    const isDateSelected = (date: Date) => {
-        return selectedDate?.getDate() === date.getDate() && selectedDate?.getMonth() === date.getMonth();
-    };
-
-    const handlePhoneChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-        const value = e.target.value.replace(/\D/g, '');
-        if (value.length <= 10) setClientPhone(value);
-    };
-
-    useEffect(() => {
-        if (existingClient) {
-            setClientName(existingClient.name);
-            setClientEmail(existingClient.email);
-        }
-    }, [existingClient]);
-
-    const pendingAppointments = appointments.filter(a => a.status === 'pending');
-
-    // Filtrar citas del día de hoy que estén pendientes o confirmadas (no canceladas ni completadas)
     const todayUpcomingAppointments = useMemo(() => {
         const now = new Date();
         const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
-        const todayEnd = todayStart + 24 * 60 * 60 * 1000; // Fin del día
+        const todayEnd = todayStart + 24 * 60 * 60 * 1000;
 
         return appointments
             .filter(appt => {
-                // Solo mostrar citas pendientes o confirmadas
                 if (appt.status === 'cancelled') return false;
-
-                // Verificar que la cita sea del día de hoy
                 if (!appt.date) return false;
                 const apptDate = new Date(appt.date).getTime();
                 if (apptDate < todayStart || apptDate >= todayEnd) return false;
 
-                // Calcular hora de fin
                 const [hours, minutes] = appt.time.split(':').map(Number);
                 const startDateTime = new Date(appt.date);
                 startDateTime.setHours(hours, minutes, 0, 0);
@@ -401,33 +96,22 @@ const Dashboard: React.FC = () => {
                 else if (!hMatch && !mMatch) durationMinutes = 60;
 
                 const endDateTime = new Date(startDateTime.getTime() + durationMinutes * 60000);
-
-                // Si AHORA es mayor que el FIN, ya pasó. Si es menor, está activa (En Servicio) o pendiente.
-                if (now >= endDateTime) return false;
-
-                return true;
+                return now < endDateTime;
             })
             .sort((a, b) => {
-                // Ordenar por hora
                 const [aH, aM] = a.time.split(':').map(Number);
                 const [bH, bM] = b.time.split(':').map(Number);
                 return (aH * 60 + aM) - (bH * 60 + bM);
             });
     }, [appointments]);
 
-    // Filtrar citas pasadas (completadas) o canceladas
     const pastAppointments = useMemo(() => {
         const now = new Date();
-
         return appointments
             .filter(appt => {
-                // Si está cancelada, incluirla
                 if (appt.status === 'cancelled') return true;
-
-                // Si no tiene fecha, ignorar
                 if (!appt.date) return false;
 
-                // Verificar si ya pasó la fecha/hora DE FINALIZACIÓN
                 const [hours, minutes] = appt.time.split(':').map(Number);
                 const startDateTime = new Date(appt.date);
                 startDateTime.setHours(hours, minutes, 0, 0);
@@ -440,34 +124,23 @@ const Dashboard: React.FC = () => {
                 else if (!hMatch && !mMatch) durationMinutes = 60;
 
                 const endDateTime = new Date(startDateTime.getTime() + durationMinutes * 60000);
-
-                // Solo si YA TERMINÓ (now >= endDateTime) es historial
                 return now >= endDateTime;
             })
             .sort((a, b) => {
-                // Ordenar por fecha descendente (más recientes primero)
                 const dateA = new Date(a.date || 0);
                 const dateB = new Date(b.date || 0);
-
-                // Comparar fechas completas (timestamp)
-                if (dateA.getTime() !== dateB.getTime()) {
-                    return dateB.getTime() - dateA.getTime();
-                }
-
-                // Si la fecha es igual, por hora descendente
+                if (dateA.getTime() !== dateB.getTime()) return dateB.getTime() - dateA.getTime();
                 const [aH, aM] = a.time.split(':').map(Number);
                 const [bH, bM] = b.time.split(':').map(Number);
                 return (bH * 60 + bM) - (aH * 60 + aM);
             })
-            .slice(0, 10); // Mostrar las últimas 10
+            .slice(0, 10);
     }, [appointments]);
 
-    // Citas de HOY (Active/Pending/Confirmed/Completed) - Excluye canceladas
     const todayCount = useMemo(() => {
         const now = new Date();
         const startOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
         const endOfDay = startOfDay + 24 * 60 * 60 * 1000;
-
         return appointments.filter(a => {
             if (a.status === 'cancelled') return false;
             if (!a.date) return false;
@@ -476,11 +149,9 @@ const Dashboard: React.FC = () => {
         }).length;
     }, [appointments]);
 
-    // Citas Confirmadas Futuras (Incluye hoy y días futuros)
     const futureConfirmedCount = useMemo(() => {
         const now = new Date();
         const startOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
-
         return appointments.filter(a => {
             if (a.status !== 'confirmed') return false;
             if (!a.date) return false;
@@ -498,7 +169,7 @@ const Dashboard: React.FC = () => {
                     <p className="text-text-sec-light dark:text-text-sec-dark text-lg font-normal">Aquí tienes el resumen de tu agenda.</p>
                 </div>
                 <button
-                    onClick={(e) => { e.stopPropagation(); setIsModalOpen(true); }}
+                    onClick={(e) => { e.stopPropagation(); setIsBookingModalOpen(true); }}
                     className="flex items-center justify-center gap-2 rounded-full h-12 px-6 bg-primary text-text-main-light dark:text-white shadow-lg shadow-primary/20 hover:bg-primary/90 hover:shadow-xl hover:-translate-y-0.5 transition-all duration-300 active:scale-95 group"
                 >
                     <span className="material-symbols-outlined group-hover:rotate-90 transition-transform">add</span>
@@ -617,7 +288,6 @@ const Dashboard: React.FC = () => {
                                                 {appt.professionalName && (
                                                     <span className="hidden sm:inline text-xs text-primary bg-primary/10 px-2 py-0.5 rounded-full font-medium">con {appt.professionalName}</span>
                                                 )}
-                                                {/* Precio en lista */}
                                                 {appt.price && <span className="hidden sm:inline text-xs text-green-600 bg-green-100 dark:bg-green-900/30 dark:text-green-400 px-2 py-0.5 rounded-full font-bold ml-1">{appt.price}</span>}
                                             </div>
                                             {appt.professionalName && <span className="sm:hidden text-xs text-primary mt-0.5">con {appt.professionalName}</span>}
@@ -637,10 +307,9 @@ const Dashboard: React.FC = () => {
                                                 <span className="material-symbols-outlined">more_vert</span>
                                             </button>
 
-                                            {/* Dropdown Menu */}
                                             {openMenuId === appt.id && (
                                                 <div className="absolute right-0 top-full mt-1 w-48 bg-card-light dark:bg-card-dark rounded-xl shadow-xl border border-border-light dark:border-border-dark z-20 overflow-hidden animate-in fade-in slide-in-from-top-2 duration-200">
-                                                    {status.label === 'Pendiente' && (
+                                                    {appt.status === 'pending' && (
                                                         <button
                                                             onClick={(e) => { e.stopPropagation(); handleUpdateStatus(appt.id, 'confirmed'); }}
                                                             className="w-full text-left px-4 py-3 text-sm font-medium hover:bg-background-light dark:hover:bg-background-dark/50 flex items-center gap-2 text-green-600 dark:text-green-400"
@@ -649,7 +318,7 @@ const Dashboard: React.FC = () => {
                                                             Confirmar Cita
                                                         </button>
                                                     )}
-                                                    {status.label === 'Confirmado' && (
+                                                    {appt.status === 'confirmed' && (
                                                         <button
                                                             onClick={(e) => { e.stopPropagation(); handleUpdateStatus(appt.id, 'pending'); }}
                                                             className="w-full text-left px-4 py-3 text-sm font-medium hover:bg-background-light dark:hover:bg-background-dark/50 flex items-center gap-2 text-orange-600 dark:text-orange-400"
@@ -659,7 +328,6 @@ const Dashboard: React.FC = () => {
                                                         </button>
                                                     )}
 
-                                                    {/* Opción para Cancelar (Cambiar estado) */}
                                                     {appt.status !== 'cancelled' && (
                                                         <button
                                                             onClick={(e) => { e.stopPropagation(); handleUpdateStatus(appt.id, 'cancelled'); }}
@@ -670,7 +338,6 @@ const Dashboard: React.FC = () => {
                                                         </button>
                                                     )}
 
-                                                    {/* Opción para Eliminar Definitivamente (Solo si ya está cancelada) */}
                                                     {appt.status === 'cancelled' && (
                                                         <button
                                                             type="button"
@@ -712,7 +379,6 @@ const Dashboard: React.FC = () => {
                     ) : (
                         pastAppointments.map((appt) => {
                             const status = getAppointmentStatus(appt);
-                            // Override status visual for past history to look "greyed out" but keep label
                             const isCancelled = appt.status === 'cancelled';
 
                             return (
@@ -755,7 +421,6 @@ const Dashboard: React.FC = () => {
                                         >
                                             {status.label}
                                         </span>
-                                        {/* Botón para eliminar del historial si se desea, o ver detalle */}
                                         <button
                                             onClick={(e) => {
                                                 e.stopPropagation();
@@ -782,21 +447,21 @@ const Dashboard: React.FC = () => {
                 onClose={() => setSelectedAppointment(null)}
                 appointment={selectedAppointment}
                 userRole="admin"
-                onConfirm={getAppointmentStatus(selectedAppointment || {}).label === 'Pendiente' ? () => {
+                onConfirm={selectedAppointment?.status === 'pending' ? () => {
                     if (selectedAppointment) {
-                        updateAppointmentStatus(selectedAppointment.id, 'confirmed');
+                        handleUpdateStatus(selectedAppointment.id, 'confirmed');
                         setSelectedAppointment(null);
                     }
                 } : undefined}
-                onCancel={(getAppointmentStatus(selectedAppointment || {}).label === 'Pendiente' || getAppointmentStatus(selectedAppointment || {}).label === 'Confirmado') ? () => {
+                onCancel={(selectedAppointment?.status === 'pending' || selectedAppointment?.status === 'confirmed') ? () => {
                     if (selectedAppointment && window.confirm('¿Estás seguro de cancelar esta cita?')) {
-                        deleteAppointment(selectedAppointment.id);
+                        handleUpdateStatus(selectedAppointment.id, 'cancelled');
                         setSelectedAppointment(null);
                     }
                 } : undefined}
             />
 
-            {/* --- MODAL DE PENDIENTES --- */}
+            {/* SOLICITUDES PENDIENTES MODAL */}
             {isPendingModalOpen && (
                 <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4 animate-in fade-in duration-200" onClick={(e) => e.stopPropagation()}>
                     <div className="bg-card-light dark:bg-card-dark rounded-2xl shadow-2xl w-full max-w-lg overflow-hidden border border-border-light dark:border-border-dark animate-in zoom-in-95 duration-200 flex flex-col max-h-[80vh]">
@@ -838,25 +503,19 @@ const Dashboard: React.FC = () => {
                                                 <div className="flex-1">
                                                     <h4 className="font-bold text-sm text-text-main-light dark:text-white hover:text-primary transition-colors underline decoration-dotted decoration-gray-300">{appt.client}</h4>
                                                     <p className="text-xs text-text-sec-light dark:text-text-sec-dark">{appt.service}</p>
-                                                    <div className="flex items-center gap-2 mt-1">
-                                                        {appt.professionalName && <span className="text-[10px] text-primary bg-primary/10 px-1.5 py-0.5 rounded">con {appt.professionalName}</span>}
-                                                        {appt.price && <span className="text-[10px] text-green-600 bg-green-100 dark:text-green-400 dark:bg-green-900/30 px-1.5 py-0.5 rounded font-bold">{appt.price}</span>}
-                                                    </div>
                                                 </div>
                                             </div>
                                             <div className="flex items-center gap-2 w-full sm:w-auto">
                                                 <button
                                                     onClick={(e) => { e.stopPropagation(); handleUpdateStatus(appt.id, 'confirmed'); }}
                                                     className="flex-1 sm:flex-none flex items-center justify-center gap-1 bg-green-100 text-green-700 hover:bg-green-200 dark:bg-green-900/30 dark:text-green-400 dark:hover:bg-green-900/50 px-3 py-2 rounded-lg text-xs font-bold transition-colors"
-                                                    title="Confirmar Cita"
                                                 >
                                                     <span className="material-symbols-outlined text-[18px]">check</span>
                                                     Confirmar
                                                 </button>
                                                 <button
-                                                    onClick={(e) => { e.stopPropagation(); handleDeleteForever(appt.id); }}
+                                                    onClick={(e) => { e.stopPropagation(); handleUpdateStatus(appt.id, 'cancelled'); }}
                                                     className="flex-1 sm:flex-none flex items-center justify-center gap-1 bg-red-100 text-red-700 hover:bg-red-200 dark:bg-red-900/30 dark:text-red-400 dark:hover:bg-red-900/50 px-3 py-2 rounded-lg text-xs font-bold transition-colors"
-                                                    title="Rechazar Cita"
                                                 >
                                                     <span className="material-symbols-outlined text-[18px]">close</span>
                                                     Rechazar
@@ -871,326 +530,13 @@ const Dashboard: React.FC = () => {
                 </div>
             )}
 
-            {/* New Appointment Modal (Unified Design) */}
-            {isModalOpen && (
-                <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-in fade-in duration-300" onClick={resetModal}>
-                    <div className="bg-white dark:bg-card-dark rounded-3xl shadow-2xl w-full max-w-2xl overflow-hidden border border-border-light dark:border-border-dark animate-in zoom-in-95 duration-300 max-h-[90vh] flex flex-col" onClick={(e) => e.stopPropagation()}>
-                        {/* Header */}
-                        <div className="bg-primary p-6 text-white flex justify-between items-center shrink-0 shadow-lg relative overflow-hidden">
-                            <div className="absolute inset-0 bg-gradient-to-r from-black/10 to-transparent pointer-events-none"></div>
-                            <div className="flex items-center gap-4 relative z-10">
-                                <div className="bg-white/20 p-2 rounded-xl backdrop-blur-md">
-                                    <span className="material-symbols-outlined text-3xl">{bookedApptDetails ? 'task_alt' : 'add_circle'}</span>
-                                </div>
-                                <div className="flex flex-col">
-                                    <h3 className="text-2xl font-black tracking-tight leading-none">{bookedApptDetails ? '¡Todo Listo!' : 'Nueva Cita'}</h3>
-                                    <span className="text-[10px] opacity-70 uppercase tracking-widest mt-1">Administración de Agenda</span>
-                                </div>
-                            </div>
-                            <button
-                                onClick={resetModal}
-                                className="hover:bg-white/20 rounded-full p-2 transition-all relative z-10 active:scale-90"
-                            >
-                                <span className="material-symbols-outlined text-2xl">close</span>
-                            </button>
-                        </div>
-
-                        <div className="flex-1 overflow-y-auto scrollbar-hide">
-                            {bookedApptDetails ? (
-                                // SUCCESS SCREEN (Unified)
-                                <div className="p-8 flex flex-col items-center animate-in zoom-in duration-500">
-                                    <div className="w-20 h-20 bg-green-100 dark:bg-green-900/30 rounded-full flex items-center justify-center mb-6 border-4 border-white dark:border-gray-800 shadow-xl overflow-hidden relative group">
-                                        <div className="absolute inset-0 bg-green-500 scale-0 group-hover:scale-100 transition-transform duration-500 rounded-full opacity-10"></div>
-                                        <span className="material-symbols-outlined text-green-500 text-5xl animate-in fade-in slide-in-from-bottom-2">check_circle</span>
-                                    </div>
-                                    <h3 className="text-3xl font-black text-slate-900 dark:text-white mb-2 text-center tracking-tight">¡Cita Registrada!</h3>
-                                    <p className="text-slate-500 dark:text-slate-400 text-center mb-8 text-lg">La cita ha sido agendada y guardada exitosamente.</p>
-
-                                    {/* Resumen Card */}
-                                    <div className="w-full bg-slate-50 dark:bg-slate-800/50 rounded-2xl p-6 border border-slate-100 dark:border-slate-800 mb-8 shadow-sm">
-                                        <div className="flex justify-between items-start mb-6">
-                                            <div className="flex flex-col gap-1">
-                                                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Servicio</span>
-                                                <span className="text-xl font-bold text-slate-800 dark:text-white leading-tight">{bookedApptDetails.service}</span>
-                                            </div>
-                                            <div className="flex flex-col items-end gap-1">
-                                                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Precio</span>
-                                                <span className="text-2xl font-black text-green-600 dark:text-green-400 tracking-tight">{bookedApptDetails.price}</span>
-                                            </div>
-                                        </div>
-                                        <div className="h-px bg-slate-200 dark:bg-slate-700 w-full mb-6"></div>
-                                        <div className="grid grid-cols-2 gap-6">
-                                            <div className="flex flex-col gap-1">
-                                                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Fecha y Hora</span>
-                                                <span className="text-sm font-bold text-slate-700 dark:text-gray-200 capitalize">
-                                                    {bookedApptDetails.date?.toLocaleDateString('es-ES', { weekday: 'long', day: 'numeric', month: 'long' })} • {bookedApptDetails.time}
-                                                </span>
-                                            </div>
-                                            <div className="flex flex-col gap-1 items-end">
-                                                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest text-right">Especialista</span>
-                                                <span className="text-sm font-bold text-primary text-right">{bookedApptDetails.professionalName}</span>
-                                            </div>
-                                        </div>
-                                    </div>
-
-                                    <div className="flex flex-col gap-3 w-full">
-                                        {successLink && (
-                                            <a
-                                                href={successLink}
-                                                target="_blank"
-                                                rel="noopener noreferrer"
-                                                className="w-full py-4 bg-white dark:bg-slate-800 border-2 border-slate-100 dark:border-slate-700 rounded-xl font-bold text-slate-700 dark:text-white flex items-center justify-center gap-3 hover:bg-slate-50 dark:hover:bg-slate-700 transition-all shadow-sm active:scale-95"
-                                            >
-                                                <img src="https://www.gstatic.com/calendar/images/dynamiclogo_2020q4/calendar_31_2x.png" className="w-6 h-6" alt="Google Calendar" />
-                                                Agregar a Google Calendar
-                                            </a>
-                                        )}
-                                        <button
-                                            onClick={resetModal}
-                                            className="w-full py-4 bg-primary text-white rounded-xl font-bold text-lg shadow-lg shadow-primary/20 hover:bg-primary/90 transition-all active:scale-95"
-                                        >
-                                            Cerrar
-                                        </button>
-                                    </div>
-                                </div>
-                            ) : (
-                                // THE FORM (Unified)
-                                <form onSubmit={handleCreateAppointment} className="p-6 flex flex-col gap-6">
-                                    {/* Price Banner Unificado */}
-                                    <div className="flex items-center justify-center bg-green-50 dark:bg-green-900/10 border border-green-200 dark:border-green-800 rounded-2xl p-6 relative overflow-hidden group">
-                                        <div className="absolute inset-0 bg-green-500/5 translate-y-full group-hover:translate-y-0 transition-transform duration-500"></div>
-                                        <div className="text-center relative z-10">
-                                            <span className="block text-xs font-bold text-green-600 dark:text-green-400 uppercase tracking-widest mb-1">Valor Estimado del Servicio</span>
-                                            <span className="block text-5xl font-black text-green-600 dark:text-green-400 tracking-tight leading-relaxed">{formatPrice(currentTotalPrice)}</span>
-                                        </div>
-                                    </div>
-
-                                    {formError && (
-                                        <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 text-red-600 dark:text-red-300 p-4 rounded-xl flex gap-3 animate-in fade-in slide-in-from-top-1">
-                                            <span className="material-symbols-outlined shrink-0">error</span>
-                                            <div className="flex flex-col">
-                                                <span className="font-bold text-sm">No se pudo agendar la cita</span>
-                                                <span className="text-xs">{formError}</span>
-                                            </div>
-                                        </div>
-                                    )}
-
-                                    {/* Datos Cliente */}
-                                    <div className="flex flex-col gap-4">
-                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                            <div className="flex flex-col gap-2">
-                                                <label className="text-sm font-bold text-slate-700 dark:text-slate-300 ml-1">Celular del Cliente</label>
-                                                <div className="relative group">
-                                                    <span className="material-symbols-outlined absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-primary transition-colors">smartphone</span>
-                                                    <input
-                                                        required
-                                                        type="tel"
-                                                        pattern="[0-9]{10}"
-                                                        maxLength={10}
-                                                        value={clientPhone}
-                                                        onChange={handlePhoneChange}
-                                                        placeholder="Ej: 3001234567"
-                                                        className="w-full rounded-xl border-2 border-slate-100 dark:border-border-dark bg-slate-50/50 dark:bg-background-dark pl-12 pr-4 h-14 text-base focus:border-primary focus:bg-white dark:focus:bg-background-dark outline-none transition-all dark:text-white"
-                                                    />
-                                                </div>
-                                            </div>
-                                            <div className="flex flex-col gap-2">
-                                                <label className="text-sm font-bold text-slate-700 dark:text-slate-300 ml-1">Correo Electrónico</label>
-                                                <div className="relative group">
-                                                    <span className="material-symbols-outlined absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-primary transition-colors">mail</span>
-                                                    <input
-                                                        required
-                                                        type="email"
-                                                        value={clientEmail}
-                                                        onChange={(e) => setClientEmail(e.target.value)}
-                                                        placeholder="cliente@correo.com"
-                                                        className="w-full rounded-xl border-2 border-slate-100 dark:border-border-dark bg-slate-50/50 dark:bg-background-dark pl-12 pr-4 h-14 text-base focus:border-primary focus:bg-white dark:focus:bg-background-dark outline-none transition-all dark:text-white"
-                                                    />
-                                                </div>
-                                            </div>
-                                        </div>
-
-                                        <div className="flex flex-col gap-2">
-                                            <label className="text-sm font-bold text-slate-700 dark:text-slate-300 ml-1">Nombre Completo</label>
-                                            <div className="relative group">
-                                                <span className="material-symbols-outlined absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-primary transition-colors">person</span>
-                                                <input
-                                                    required
-                                                    type="text"
-                                                    value={clientName}
-                                                    onChange={(e) => setClientName(e.target.value)}
-                                                    placeholder="Nombre del cliente"
-                                                    className="w-full rounded-xl border-2 border-slate-100 dark:border-border-dark bg-slate-50/50 dark:bg-background-dark pl-12 pr-4 h-14 text-base focus:border-primary focus:bg-white dark:focus:bg-background-dark outline-none transition-all dark:text-white"
-                                                    readOnly={!!existingClient}
-                                                />
-                                                {existingClient && <span className="absolute right-4 top-1/2 -translate-y-1/2 text-[10px] font-black text-primary bg-primary/5 px-2 py-1 rounded-lg uppercase tracking-widest">Cliente Frecuente</span>}
-                                            </div>
-                                        </div>
-                                    </div>
-
-                                    {/* Servicio y Profesional */}
-                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                        <div className="flex flex-col gap-2">
-                                            <label className="text-sm font-bold text-slate-700 dark:text-slate-300 ml-1">Tratamiento o Servicio</label>
-                                            <div className="relative group">
-                                                <span className="material-symbols-outlined absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-primary transition-colors">spa</span>
-                                                <select
-                                                    value={service}
-                                                    onChange={(e) => setService(e.target.value)}
-                                                    required
-                                                    className="w-full rounded-xl border-2 border-slate-100 dark:border-border-dark bg-slate-50/50 dark:bg-background-dark pl-12 pr-10 h-14 text-base focus:border-primary focus:bg-white dark:focus:bg-background-dark outline-none transition-all appearance-none dark:text-white truncate"
-                                                >
-                                                    <option value="" disabled>Selecciona un servicio...</option>
-                                                    {Array.from(new Set(services.map(s => s.category))).map(cat => (
-                                                        <optgroup key={cat} label={cat} className="font-bold text-primary italic bg-white dark:bg-card-dark">
-                                                            {services.filter(s => s.category === cat).map(s => (
-                                                                <option key={s.id} value={s.name} className="font-normal text-slate-700 dark:text-white not-italic">{s.name}</option>
-                                                            ))}
-                                                        </optgroup>
-                                                    ))}
-                                                </select>
-                                                <span className="material-symbols-outlined absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none">expand_more</span>
-                                            </div>
-
-                                            {/* Retiro específico selector (Solo si no es un retiro ya) */}
-                                            {service && !service.includes('Retiro') && !service.includes('Corte') && !service.includes('Masaje') && !service.includes('Depilación') && !service.includes('Epilación') && (
-                                                <div className="mt-2 p-4 bg-slate-50 dark:bg-slate-800/40 rounded-xl border-2 border-slate-100 dark:border-slate-800 border-dashed">
-                                                    <span className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-3">¿Incluye Retiro? (+30m)</span>
-                                                    <div className="grid grid-cols-2 gap-2">
-                                                        <button
-                                                            type="button"
-                                                            onClick={() => setRemovalType(removalType === 'semi' ? '' : 'semi')}
-                                                            className={`py-2 px-3 rounded-lg text-xs font-bold transition-all border-2 ${removalType === 'semi' ? 'bg-primary border-primary text-white shadow-md' : 'bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:border-primary/50'}`}
-                                                        >
-                                                            Semi (+10k)
-                                                        </button>
-                                                        <button
-                                                            type="button"
-                                                            onClick={() => setRemovalType(removalType === 'acrylic' ? '' : 'acrylic')}
-                                                            className={`py-2 px-3 rounded-lg text-xs font-bold transition-all border-2 ${removalType === 'acrylic' ? 'bg-primary border-primary text-white shadow-md' : 'bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:border-primary/50'}`}
-                                                        >
-                                                            Acrílico (+15k)
-                                                        </button>
-                                                    </div>
-                                                </div>
-                                            )}
-                                        </div>
-
-                                        <div className="flex flex-col gap-2">
-                                            <label className="text-sm font-bold text-slate-700 dark:text-slate-300 ml-1">Especialista</label>
-                                            <div className="relative group">
-                                                <span className="material-symbols-outlined absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-primary transition-colors">person_pin</span>
-                                                <select
-                                                    value={selectedProfessionalId}
-                                                    onChange={(e) => setSelectedProfessionalId(e.target.value === '' ? '' : Number(e.target.value))}
-                                                    required
-                                                    className="w-full rounded-xl border-2 border-slate-100 dark:border-border-dark bg-slate-50/50 dark:bg-background-dark pl-12 pr-10 h-14 text-base focus:border-primary focus:bg-white dark:focus:bg-background-dark outline-none transition-all appearance-none dark:text-white"
-                                                >
-                                                    <option value="">{service ? 'Selecciona un especialista' : 'Primero elige un servicio'}</option>
-                                                    {availableProfessionals.map(p => (
-                                                        <option key={p.id} value={p.id}>{p.name}</option>
-                                                    ))}
-                                                </select>
-                                                <span className="material-symbols-outlined absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none">expand_more</span>
-                                            </div>
-                                        </div>
-                                    </div>
-
-                                    {/* Fecha */}
-                                    <div className="flex flex-col gap-3">
-                                        <label className="text-sm font-bold text-slate-700 dark:text-slate-300 ml-1 flex items-center gap-2">
-                                            <span className="material-symbols-outlined text-[18px] text-primary">calendar_month</span>
-                                            Fecha de la Cita
-                                        </label>
-                                        <div className="grid grid-cols-4 sm:grid-cols-7 gap-2">
-                                            {availableDays.map((date, idx) => {
-                                                const isSelected = isDateSelected(date);
-                                                return (
-                                                    <button
-                                                        key={idx}
-                                                        type="button"
-                                                        onClick={() => setSelectedDate(date)}
-                                                        className={`flex flex-col items-center justify-center p-3 rounded-2xl transition-all border-2 ${isSelected ? 'bg-primary border-primary text-white shadow-lg scale-105 z-10' : 'bg-slate-50 dark:bg-background-dark border-slate-100 dark:border-border-dark text-slate-600 dark:text-slate-400 hover:border-primary/30'}`}
-                                                    >
-                                                        <span className="text-[10px] font-black uppercase tracking-tighter opacity-70">{date.toLocaleDateString('es-ES', { weekday: 'short' })}</span>
-                                                        <span className="text-xl font-black tabular-nums leading-none mt-1">{date.getDate()}</span>
-                                                        <span className="text-[10px] font-bold uppercase mt-1">{date.toLocaleDateString('es-ES', { month: 'short' })}</span>
-                                                    </button>
-                                                );
-                                            })}
-                                        </div>
-                                    </div>
-
-                                    {/* Horarios */}
-                                    <div className="flex flex-col gap-3">
-                                        <label className="text-sm font-bold text-slate-700 dark:text-slate-300 ml-1 flex items-center gap-2">
-                                            <span className="material-symbols-outlined text-[18px] text-primary">schedule</span>
-                                            Horario Disponible
-                                        </label>
-                                        {!selectedDate ? (
-                                            <div className="py-8 bg-slate-50 dark:bg-background-dark/30 rounded-2xl border-2 border-slate-100 dark:border-border-dark border-dashed flex flex-col items-center justify-center text-slate-400">
-                                                <span className="material-symbols-outlined text-3xl mb-2 opacity-50">touch_app</span>
-                                                <p className="text-xs font-bold uppercase tracking-widest">Selecciona una fecha primero</p>
-                                            </div>
-                                        ) : timeSlots.length === 0 ? (
-                                            <div className="py-8 bg-red-50 dark:bg-red-900/10 rounded-2xl border-2 border-red-100 dark:border-red-900/30 border-dashed flex flex-col items-center justify-center text-red-400">
-                                                <span className="material-symbols-outlined text-3xl mb-2">event_busy</span>
-                                                <p className="text-xs font-bold uppercase tracking-widest text-center px-4">No hay horarios disponibles para esta combinación</p>
-                                            </div>
-                                        ) : (
-                                            <div className="grid grid-cols-4 sm:grid-cols-6 gap-2">
-                                                {timeSlots.map(time => {
-                                                    const occupied = isSlotOccupied(time);
-                                                    const isSelected = selectedTime === time;
-                                                    return (
-                                                        <button
-                                                            key={time}
-                                                            type="button"
-                                                            disabled={occupied}
-                                                            onClick={() => setSelectedTime(time)}
-                                                            className={`py-3 rounded-xl text-sm font-black transition-all border-2 ${occupied ? 'bg-slate-100 dark:bg-slate-800 border-transparent text-slate-300 dark:text-slate-600 cursor-not-allowed' : isSelected ? 'bg-primary border-primary text-white shadow-md scale-105 z-10' : 'bg-white dark:bg-background-dark border-slate-100 dark:border-border-dark text-slate-700 dark:text-slate-300 hover:border-primary/50'}`}
-                                                        >
-                                                            {time}
-                                                        </button>
-                                                    );
-                                                })}
-                                            </div>
-                                        )}
-                                    </div>
-
-                                    {/* Footer del Formulario */}
-                                    <div className="flex items-center gap-4 pt-6 border-t border-slate-100 dark:border-border-dark mt-4">
-                                        <button
-                                            type="button"
-                                            onClick={resetModal}
-                                            className="px-6 py-4 rounded-2xl font-bold text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
-                                        >
-                                            Cancelar
-                                        </button>
-                                        <button
-                                            type="submit"
-                                            disabled={!selectedDate || !selectedTime || !service || !selectedProfessionalId || isSubmitting}
-                                            className={`flex-1 py-4 rounded-2xl font-black text-lg transition-all shadow-xl flex items-center justify-center gap-3 ${!selectedDate || !selectedTime || !service || !selectedProfessionalId || isSubmitting ? 'bg-slate-200 text-slate-400 cursor-not-allowed' : 'bg-primary text-white hover:bg-primary/90 shadow-primary/30 active:scale-95'}`}
-                                        >
-                                            {isSubmitting ? (
-                                                <>
-                                                    <span className="animate-spin material-symbols-outlined">progress_activity</span>
-                                                    Registrando...
-                                                </>
-                                            ) : (
-                                                <>
-                                                    Confirmar Cita
-                                                    <span className="material-symbols-outlined">arrow_forward</span>
-                                                </>
-                                            )}
-                                        </button>
-                                    </div>
-                                </form>
-                            )}
-                        </div>
-                    </div>
-                </div>
-            )}
+            {/* MODAL NUEVA CITA (Unificado) */}
+            <BookingModal
+                isOpen={isBookingModalOpen}
+                onClose={() => setIsBookingModalOpen(false)}
+                userRole="admin"
+                userProfile={userProfile}
+            />
         </div>
     );
 };

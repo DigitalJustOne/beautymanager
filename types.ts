@@ -13,6 +13,7 @@ export interface Appointment {
     professionalId?: number; // Nuevo campo
     professionalName?: string; // Nuevo campo
     price?: string; // Nuevo campo para el precio
+    phone?: string; // Teléfono del cliente para contacto
 }
 
 export interface Client {
