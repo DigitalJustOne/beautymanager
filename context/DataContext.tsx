@@ -69,10 +69,26 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     });
 
     // Update LocalStorage when state changes
-    useEffect(() => localStorage.setItem('beautymanager_appts', JSON.stringify(appointments)), [appointments]);
-    useEffect(() => localStorage.setItem('beautymanager_clients', JSON.stringify(clients)), [clients]);
-    useEffect(() => localStorage.setItem('beautymanager_pros', JSON.stringify(professionals)), [professionals]);
-    useEffect(() => localStorage.setItem('beautymanager_services', JSON.stringify(services)), [services]);
+    // Helper to safe set localStorage
+    const safeSetItem = (key: string, value: any) => {
+        try {
+            localStorage.setItem(key, JSON.stringify(value));
+        } catch (e) {
+            console.warn(`LocalStorage quota exceeded for ${key}. Clearing cache.`);
+            try {
+                localStorage.clear(); // Emergency clear
+                localStorage.setItem(key, JSON.stringify(value));
+            } catch (retryError) {
+                console.error("Failed to save to localStorage even after clear:", retryError);
+            }
+        }
+    };
+
+    // Update LocalStorage when state changes
+    useEffect(() => safeSetItem('beautymanager_appts', appointments), [appointments]);
+    useEffect(() => safeSetItem('beautymanager_clients', clients), [clients]);
+    useEffect(() => safeSetItem('beautymanager_pros', professionals), [professionals]);
+    useEffect(() => safeSetItem('beautymanager_services', services), [services]);
 
     useEffect(() => {
         if (!session || !role || !profile) return;
