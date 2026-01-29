@@ -95,15 +95,32 @@ const Login: React.FC = () => {
                     <button
                         type="button"
                         onClick={async () => {
-                            setFormLoading(true);
-                            const { error } = await supabase.auth.signInWithOAuth({
-                                provider: 'google',
-                                options: {
-                                    redirectTo: window.location.origin, // Redirect back to this app after Google login
+                            try {
+                                setFormLoading(true);
+                                console.log("Iniciando OAuth con URL de redirección:", window.location.origin);
+                                
+                                const { data, error } = await supabase.auth.signInWithOAuth({
+                                    provider: 'google',
+                                    options: {
+                                        redirectTo: window.location.origin,
+                                        skipBrowserRedirect: false,
+                                    }
+                                });
+
+                                if (error) {
+                                    console.error("Error en OAuth:", error);
+                                    setFormError(error.message);
+                                    // Alert para debug en móvil
+                                    alert(`Error al conectar con Google: ${error.message}`);
+                                    setFormLoading(false);
+                                } else {
+                                    // Si no hay error, la redirección debería ocurrir automáticamente.
+                                    // Si data.url existe, podríamos forzarla, pero el SDK suele encargarse.
+                                    console.log("OAuth iniciado correctamente:", data);
                                 }
-                            });
-                            if (error) {
-                                setFormError(error.message);
+                            } catch (err: any) {
+                                console.error("Excepción en OAuth:", err);
+                                setFormError(err.message || "Error desconocido al iniciar sesión");
                                 setFormLoading(false);
                             }
                         }}
