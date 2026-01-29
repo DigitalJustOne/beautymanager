@@ -199,7 +199,7 @@ const BookingModal: React.FC<BookingModalProps> = ({
 
         return appointments.some(appt => {
             if (appt.status === 'cancelled') return false;
-            if (appt.professionalId !== Number(selectedProfessionalId)) return false;
+            if (Number(appt.professionalId) !== Number(selectedProfessionalId)) return false;
             if (appt.date?.toDateString() !== selectedDate.toDateString()) return false;
 
             const apptStart = appt.time.split(':').reduce((acc, curr, i) => acc + Number(curr) * (i === 0 ? 60 : 1), 0);
