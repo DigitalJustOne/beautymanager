@@ -11,20 +11,31 @@ const ClientDashboard: React.FC = () => {
     // For clients: appointments contains OWN (full) + OTHERS (masked)
     // We filter 'myAppointments' to show only confirmed/pending own appointments AND SORT THEM
     const myAppointments = useMemo(() => {
-        return appointments
-            .filter(a => a.client !== 'Reservado' && a.service !== 'Ocupado')
-            .sort((a, b) => {
-                // Ordenar por fecha descendente
-                const dateA = new Date(a.date || 0);
-                const dateB = new Date(b.date || 0);
-                const timeDiff = dateB.getTime() - dateA.getTime();
-                if (timeDiff !== 0) return timeDiff;
+        const now = new Date();
+        const getTs = (a: any) => {
+            const d = new Date(a.date);
+            const [h, m] = a.time.split(':').map(Number);
+            d.setHours(h, m, 0, 0);
+            return d.getTime();
+        };
 
-                // Si es el mismo día, ordenar por hora descendente
-                const [aH, aM] = a.time.split(':').map(Number);
-                const [bH, bM] = b.time.split(':').map(Number);
-                return (bH * 60 + bM) - (aH * 60 + aM);
-            });
+        const list = appointments.filter(a => a.client !== 'Reservado' && a.service !== 'Ocupado');
+        const active = [];
+        const history = [];
+
+        for (const appt of list) {
+            const ts = getTs(appt);
+            const isFinished = ['cancelled', 'completed'].includes(appt.status) || ts < now.getTime();
+            if (isFinished) history.push(appt);
+            else active.push(appt);
+        }
+
+        // Active: Ascending (Soonest first)
+        active.sort((a, b) => getTs(a) - getTs(b));
+        // History: Descending (Recent past first)
+        history.sort((a, b) => getTs(b) - getTs(a));
+
+        return [...active, ...history];
     }, [appointments]);
 
     const [isEditing, setIsEditing] = useState(false);
@@ -184,11 +195,15 @@ const ClientDashboard: React.FC = () => {
                         ) : (
                             myAppointments.map(appt => {
                                 const status = getAppointmentStatus(appt);
+                                const apptDate = new Date(appt.date);
+                                const [h, m] = appt.time.split(':').map(Number);
+                                apptDate.setHours(h, m, 0, 0);
+                                const isHistory = ['cancelled', 'completed'].includes(appt.status) || new Date() > apptDate;
                                 return (
                                     <div
                                         key={appt.id}
                                         onClick={() => setSelectedAppt(appt)}
-                                        className="p-4 bg-background-light dark:bg-background-dark rounded-xl border border-border-light dark:border-border-dark border-l-4 border-l-primary hover:border-primary transition-all cursor-pointer group animate-in slide-in-from-right duration-300"
+                                        className={`p-4 bg-background-light dark:bg-background-dark rounded-xl border border-border-light dark:border-border-dark border-l-4 border-l-primary hover:border-primary transition-all cursor-pointer group animate-in slide-in-from-right duration-300 ${isHistory ? 'opacity-60 grayscale' : ''}`}
                                     >
                                         <div className="flex justify-between items-start gap-3">
                                             <div className="flex-1 min-w-0">
