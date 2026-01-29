@@ -213,6 +213,53 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         fetchData();
     }, [session, role]);
 
+    // Helper to check for overlapping appointments
+    const checkOverlap = (proId: number, dateIso: string, time: string, durationText: string, currentApptId?: number): boolean => {
+        const targetDateObj = new Date(dateIso);
+        // Normalizar a timestamp del inicio del día local
+        const targetDate = new Date(targetDateObj.getFullYear(), targetDateObj.getMonth(), targetDateObj.getDate()).getTime();
+
+        const [checkH, checkM] = time.split(':').map(Number);
+        const newStart = checkH * 60 + checkM;
+
+        let newDuration = 60;
+        const hMatch = durationText.match(/(\d+)h/);
+        const mMatch = durationText.match(/(\d+)m/);
+        if (hMatch) newDuration = parseInt(hMatch[1]) * 60;
+        if (mMatch) newDuration += parseInt(mMatch[1]);
+        else if (!hMatch && !mMatch && durationText.includes('m')) newDuration = parseInt(durationText.replace('m', ''));
+
+        const newEnd = newStart + newDuration;
+
+        return appointments.some(appt => {
+            if (appt.id === currentApptId) return false;
+            if (appt.status === 'cancelled') return false;
+
+            // Si estmos comprobando un conflicto para CONFIRMAR, solo chocamos con otros CONFIRMADOS
+            // Si estamos comprobando para CREAR, chocamos con TODO excepto cancelados (para evitar basura)
+            // Edit: Si el usuario quiere máxima seguridad, evitaremos solapar con cualquier cosa activa.
+
+            if (appt.professionalId !== proId || !appt.date) return false;
+
+            const apptDateObj = new Date(appt.date);
+            const apptDate = new Date(apptDateObj.getFullYear(), apptDateObj.getMonth(), apptDateObj.getDate()).getTime();
+
+            if (apptDate !== targetDate) return false;
+
+            const [existH, existM] = appt.time.split(':').map(Number);
+            const existStart = existH * 60 + existM;
+            let existDuration = 60;
+            const ehMatch = appt.duration.match(/(\d+)h/);
+            const emMatch = appt.duration.match(/(\d+)m/);
+            if (ehMatch) existDuration = parseInt(ehMatch[1]) * 60;
+            if (emMatch) existDuration += parseInt(emMatch[1]);
+            else if (!ehMatch && !emMatch && appt.duration.includes('m')) existDuration = parseInt(appt.duration.replace('m', ''));
+
+            const existEnd = existStart + existDuration;
+            return (newStart < existEnd && newEnd > existStart);
+        });
+    };
+
     const addAppointment = async (appt: Appointment) => {
         // Calculate minutes duration
         let durationMinutes = 60;
@@ -263,6 +310,13 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
             finalDateIso = d.toISOString();
         }
 
+        // --- OVERLAP VALIDATION ---
+        if (appt.professionalId && finalDateIso && checkOverlap(appt.professionalId, finalDateIso, appt.time, appt.duration)) {
+            const proName = professionals.find(p => p.id === appt.professionalId)?.name || 'el profesional';
+            alert(`Conflicto Detectado: ${proName} ya tiene una cita agendada en ese horario. Por favor elige otro.`);
+            throw new Error("Overlap detected");
+        }
+
         const { data, error } = await supabase.from('appointments').insert({
             service: appt.service,
             client_id: finalClientId,
@@ -311,7 +365,21 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     };
 
     const updateAppointmentStatus = async (id: number, status: 'confirmed' | 'pending' | 'cancelled') => {
-        await supabase.from('appointments').update({ status }).eq('id', id);
+        const target = appointments.find(a => a.id === id);
+
+        // --- OVERLAP VALIDATION FOR CONFIRMATION ---
+        if (status === 'confirmed' && target && target.professionalId && target.date) {
+            if (checkOverlap(target.professionalId, target.date.toISOString(), target.time, target.duration, id)) {
+                alert(`Error: No se puede confirmar. El profesional ya tiene otra cita en este horario.`);
+                return;
+            }
+        }
+
+        const { error } = await supabase.from('appointments').update({ status }).eq('id', id);
+        if (error) {
+            alert("Error al actualizar estado: " + error.message);
+            return;
+        }
         setAppointments(prev => prev.map(appt => appt.id === id ? { ...appt, status } : appt));
     };
 

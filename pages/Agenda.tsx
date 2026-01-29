@@ -372,7 +372,7 @@ const Agenda: React.FC = () => {
         e.preventDefault();
         setFormError(null);
 
-        if (!selectedDate || !selectedTime || !clientName || !clientEmail || clientPhone.length !== 10 || !selectedProfessionalId) return;
+        if (!selectedDate || !selectedTime || !clientName || !clientEmail || clientPhone.length !== 10 || !selectedProfessionalId || isSubmitting) return;
 
         // Validación Final de Conflicto (Doble chequeo)
         if (isSlotOccupied(selectedTime)) {

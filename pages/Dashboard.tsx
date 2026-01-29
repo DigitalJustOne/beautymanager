@@ -286,7 +286,7 @@ const Dashboard: React.FC = () => {
         e.preventDefault();
         setFormError(null);
 
-        if (!selectedDate || !selectedTime || !clientName || !clientEmail || !clientPhone || !selectedProfessionalId) return;
+        if (!selectedDate || !selectedTime || !clientName || !clientEmail || !clientPhone || !selectedProfessionalId || isSubmitting) return;
 
         if (clientPhone.length !== 10) {
             setFormError("Por favor ingresa un número de celular válido de 10 dígitos.");
