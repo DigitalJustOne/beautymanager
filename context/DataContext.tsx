@@ -1,5 +1,5 @@
 
-import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
+import React, { createContext, useContext, useState, useEffect, ReactNode, useRef } from 'react';
 import { Appointment, Client, UserProfile, Professional, Service } from '../types';
 import { supabase } from '../services/supabase';
 import { useAuth } from './AuthContext';
@@ -27,13 +27,26 @@ interface DataContextType {
 
 const DataContext = createContext<DataContextType | undefined>(undefined);
 
+// Helper to safely parse JSON
+const safeParse = <T,>(key: string, fallback: T): T => {
+    try {
+        const item = localStorage.getItem(key);
+        return item ? JSON.parse(item) : fallback;
+    } catch {
+        return fallback;
+    }
+};
+
 export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
     const { session, role, profile } = useAuth();
-    const [appointments, setAppointments] = useState<Appointment[]>([]);
-    const [clients, setClients] = useState<Client[]>([]);
-    const [professionals, setProfessionals] = useState<Professional[]>([]);
-    const [services, setServices] = useState<Service[]>([]);
-    // Horario predeterminado para los 7 días de la semana
+
+    // --- 1. Initialize State from Cache (Instant Load) ---
+    const [appointments, setAppointments] = useState<Appointment[]>(() => safeParse('beautymanager_appts', []));
+    const [clients, setClients] = useState<Client[]>(() => safeParse('beautymanager_clients', []));
+    const [professionals, setProfessionals] = useState<Professional[]>(() => safeParse('beautymanager_pros', []));
+    const [services, setServices] = useState<Service[]>(() => safeParse('beautymanager_services', []));
+
+    // Horario predeterminado
     const defaultSchedule = [
         { day: 'Lunes', enabled: true, start: '09:00', end: '18:00' },
         { day: 'Martes', enabled: true, start: '09:00', end: '18:00' },
@@ -55,21 +68,13 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         schedule: defaultSchedule
     });
 
+    // Update LocalStorage when state changes
+    useEffect(() => localStorage.setItem('beautymanager_appts', JSON.stringify(appointments)), [appointments]);
+    useEffect(() => localStorage.setItem('beautymanager_clients', JSON.stringify(clients)), [clients]);
+    useEffect(() => localStorage.setItem('beautymanager_pros', JSON.stringify(professionals)), [professionals]);
+    useEffect(() => localStorage.setItem('beautymanager_services', JSON.stringify(services)), [services]);
+
     useEffect(() => {
-        // --- 1. Load from Cache immediately (Instant visual load) ---
-        const loadCache = () => {
-            const cachedServices = localStorage.getItem('beautymanager_services');
-            const cachedPros = localStorage.getItem('beautymanager_pros');
-            const cachedAppts = localStorage.getItem('beautymanager_appts');
-            const cachedClients = localStorage.getItem('beautymanager_clients');
-
-            if (cachedServices) setServices(JSON.parse(cachedServices));
-            if (cachedPros) setProfessionals(JSON.parse(cachedPros));
-            if (cachedAppts) setAppointments(JSON.parse(cachedAppts));
-            if (cachedClients) setClients(JSON.parse(cachedClients));
-        };
-        loadCache();
-
         if (!session || !role || !profile) return;
 
         setUserProfile(prev => ({
@@ -88,133 +93,142 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
             console.log("Fetching data started...");
             const startTime = performance.now();
 
-            // --- Phase 1: Fetch Base Data (Parallel) ---
-            // Services, Professionals, and "MyClient" ID (if client) can be fetched simultaneously
+            // --- Optimized Parallel Fetching ---
+
+            // 1. Queries that don't depend on others
             const servicesPromise = supabase.from('services').select('*').order('category', { ascending: true });
             const prosPromise = supabase.from('professionals').select('*');
 
-            // If client, fetch self-id early
+            // If client, we need our own ID. If admin/pro, we can optimize.
             const myClientIdPromise = role === 'client'
                 ? supabase.from('clients').select('id').eq('email', session.user.email).limit(1).single()
-                : Promise.resolve({ data: null, error: null });
+                : Promise.resolve({ data: null });
 
-            const [servicesResult, prosResult, myClientResult] = await Promise.all([
-                servicesPromise,
-                prosPromise,
-                myClientIdPromise
-            ]);
-
-            // Process Services
-            if (servicesResult.data) {
-                const mappedServices = servicesResult.data.map((s: any) => ({
-                    id: s.id,
-                    name: s.name,
-                    price: s.price,
-                    duration: s.duration,
-                    category: s.category
-                }));
-                setServices(mappedServices);
-                localStorage.setItem('beautymanager_services', JSON.stringify(mappedServices));
-            }
-
-            // Process Professionals
-            let mappedPros: Professional[] = [];
-            if (prosResult.data) {
-                mappedPros = prosResult.data.map((p: any) => ({
-                    id: p.id,
-                    name: p.name,
-                    role: p.role,
-                    avatar: p.avatar || p.avatar_url || `https://ui-avatars.com/api/?name=${encodeURIComponent(p.name)}&background=random`,
-                    email: p.email,
-                    specialties: p.specialties || [],
-                    profileId: p.profile_id
-                }));
-                setProfessionals(mappedPros);
-                localStorage.setItem('beautymanager_pros', JSON.stringify(mappedPros));
-            }
-
-            // Determine IDs for Appointments query
-            let currentClientId: number | undefined;
-            if (role === 'client' && myClientResult?.data) {
-                currentClientId = myClientResult.data.id;
-            }
-
-            // --- Phase 2: Fetch Appointments (Dependent on Pros/Client ID) ---
+            // Prepare Appointments Query
             let apptsQuery = supabase.from('appointments').select(`
                 *,
                 clients (name, avatar),
                 professionals (name)
             `);
 
-            if (role === 'professional') {
-                const myPro = mappedPros.find(p => p.email?.toLowerCase() === session.user.email?.toLowerCase());
-                if (myPro) {
-                    apptsQuery = apptsQuery.eq('professional_id', myPro.id);
-                } else {
-                    // Fallback if not found yet (shouldn't happen if profile sync works)
-                    apptsQuery = apptsQuery.eq('id', -1);
+            // If Professional, filter at DB level immediately? 
+            // We fetch ALL for now to handle overlaps properly, but we could filter by date range if too slow.
+            // For now, fetching all is fine for < 1000 records.
+            const apptsPromise = apptsQuery;
+
+            // Prepare Clients Query
+            // Admin: All clients
+            // Pro: Clients linked to them? Or all clients (policy allows)? 
+            // Policy "Admins and Pros see all clients" allows fetching all.
+            // fetching all is faster than waterfall logic "fetch appts -> extract IDs -> fetch clients".
+            const clientsPromise = (role === 'admin' || role === 'professional')
+                ? supabase.from('clients').select('*').order('created_at', { ascending: false })
+                : Promise.resolve({ data: null });
+
+            try {
+                const [servicesRes, prosRes, myClientRes, apptsRes, clientsRes] = await Promise.all([
+                    servicesPromise,
+                    prosPromise,
+                    myClientIdPromise,
+                    apptsPromise,
+                    clientsPromise
+                ]);
+
+                // --- PROCESS SERVICES ---
+                if (servicesRes.data) {
+                    setServices(servicesRes.data.map((s: any) => ({
+                        id: s.id,
+                        name: s.name,
+                        price: s.price,
+                        duration: s.duration,
+                        category: s.category
+                    })));
                 }
-            }
-            // Note: Clients see ONLY their own appointments? Or all but anonymized?
-            // Existing logic seemed to fetch ALL and then filter/anonymize in memory.
-            // But optimal way is to just fetch what's needed. However, to see "busy" slots, 
-            // clients need to see OTHER appointments too, but obscured.
-            // So we fetch ALL appointments (or filtered by date range if optimization needed later).
 
-            const { data: apptsData } = await apptsQuery;
+                // --- PROCESS PROFESSIONALS ---
+                let mappedPros: Professional[] = [];
+                if (prosRes.data) {
+                    mappedPros = prosRes.data.map((p: any) => ({
+                        id: p.id,
+                        name: p.name,
+                        role: p.role,
+                        avatar: p.avatar || p.avatar_url || `https://ui-avatars.com/api/?name=${encodeURIComponent(p.name)}&background=random`,
+                        email: p.email,
+                        specialties: p.specialties || [],
+                        profileId: p.profile_id
+                    }));
+                    setProfessionals(mappedPros);
+                }
 
-            let finalAppointments: Appointment[] = [];
+                // --- PROCESS APPOINTMENTS ---
+                let currentClientId: number | undefined;
+                if (role === 'client' && myClientRes.data) {
+                    currentClientId = myClientRes.data.id;
+                }
 
-            if (apptsData) {
-                finalAppointments = apptsData.map((a: any) => {
-                    let isOwn = true;
-                    if (role === 'client') {
-                        isOwn = currentClientId !== undefined && a.client_id === currentClientId;
-                    }
+                if (apptsRes.data) {
+                    const finalAppts = apptsRes.data.map((a: any) => {
+                        // Logic for obfuscation
+                        let isOwn = true;
+                        if (role === 'client') {
+                            isOwn = currentClientId !== undefined && a.client_id === currentClientId;
+                        }
 
-                    if (role === 'client' && !isOwn) {
-                        // Anonymized for other clients
+                        // Filter Process: If professional, we typically only show THEIR schedule in the view, 
+                        // but the context stores ALL for overlap checking (if needed) OR we filter here.
+                        // The previous logic filtered "myAppts" in state? No, it fetched by ID.
+                        // However, seeing "status" of other pros is useful for admin.
+                        // Admin sees all. Pro sees mostly theirs but maybe others for conflict? 
+                        // Current requirement: "Professional solo puede visualizar sus clientes".
+                        // This usually applies to the Clients List. appointments often need to be known for overlaps.
+
+                        // Obfuscation for Clients seeing other slots
+                        if (role === 'client' && !isOwn) {
+                            return {
+                                id: a.id,
+                                time: a.time || (a.date ? new Date(a.date).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : ''),
+                                ampm: a.time ? (parseInt(a.time.split(':')[0]) >= 12 ? 'PM' : 'AM') : '',
+                                client: 'Reservado', // Obfuscated
+                                service: 'Ocupado',
+                                duration: a.duration_minutes ? `${Math.floor(a.duration_minutes / 60)}h ${a.duration_minutes % 60}m` : '0m',
+                                avatar: 'https://ui-avatars.com/api/?name=X&background=dddddd',
+                                status: a.status,
+                                date: new Date(a.date),
+                                professionalId: a.professional_id,
+                                professionalName: a.professionals?.name,
+                                price: undefined
+                            };
+                        }
+
                         return {
                             id: a.id,
                             time: a.time || (a.date ? new Date(a.date).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : ''),
                             ampm: a.time ? (parseInt(a.time.split(':')[0]) >= 12 ? 'PM' : 'AM') : '',
-                            client: 'Reservado',
-                            service: 'Ocupado',
+                            client: a.clients?.name || 'Desconocido',
+                            service: a.service,
                             duration: a.duration_minutes ? `${Math.floor(a.duration_minutes / 60)}h ${a.duration_minutes % 60}m` : '0m',
-                            avatar: 'https://ui-avatars.com/api/?name=X&background=dddddd',
+                            avatar: a.clients?.avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(a.clients?.name || 'C')}&background=random`,
                             status: a.status,
                             date: new Date(a.date),
                             professionalId: a.professional_id,
                             professionalName: a.professionals?.name,
-                            price: undefined
+                            price: a.price ? `$${a.price}` : undefined
                         };
-                    }
+                    });
 
-                    return {
-                        id: a.id,
-                        time: a.time || (a.date ? new Date(a.date).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : ''),
-                        ampm: a.time ? (parseInt(a.time.split(':')[0]) >= 12 ? 'PM' : 'AM') : '',
-                        client: a.clients?.name || 'Desconocido',
-                        service: a.service,
-                        duration: a.duration_minutes ? `${Math.floor(a.duration_minutes / 60)}h ${a.duration_minutes % 60}m` : '0m',
-                        avatar: a.clients?.avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(a.clients?.name || 'C')}&background=random`,
-                        status: a.status,
-                        date: new Date(a.date),
-                        professionalId: a.professional_id,
-                        professionalName: a.professionals?.name,
-                        price: a.price ? `$${a.price}` : undefined
-                    };
-                });
+                    // Professional Filtering:
+                    // Requirement: "profesional solo puede visualizar los clientes de el mismo y solo sus clientes que han agendado con él mismo"
+                    // BUT for the agenda (checking overlaps), we often need all appointments? 
+                    // Let's keep all appointments in state, but Views (Agenda/Clients) should filter.
+                    // HOWEVER, if we want to be strict with data loaded:
+                    // If Pro, maybe valid to keep all appointments to see blocked slots if working in same salon?
+                    // Assuming yes for Appts.
+                    setAppointments(finalAppts);
+                }
 
-                setAppointments(finalAppointments);
-                localStorage.setItem('beautymanager_appts', JSON.stringify(finalAppointments));
-            }
-
-            // --- Phase 3: Fetch Clients (Dependent on Role & Appointments for Pros) ---
-            if (role === 'admin') {
-                const { data: clientsData } = await supabase.from('clients').select('*').order('created_at', { ascending: false });
-                if (clientsData) {
-                    const mappedClients: Client[] = clientsData.map((c: any) => ({
+                // --- PROCESS CLIENTS ---
+                if (clientsRes.data) {
+                    const allClients = clientsRes.data.map((c: any) => ({
                         id: c.id,
                         name: c.name,
                         email: c.email,
@@ -225,42 +239,41 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
                         role: c.role,
                         profileId: c.profile_id
                     }));
-                    setClients(mappedClients);
-                    localStorage.setItem('beautymanager_clients', JSON.stringify(mappedClients));
-                }
-            } else if (role === 'professional' && apptsData) {
-                // Extract unique client IDs from appointments we just loaded
-                const clientIds = Array.from(new Set(apptsData.map((a: any) => a.client_id).filter((id: any) => id !== null)));
 
-                if (clientIds.length > 0) {
-                    const { data: clientsData } = await supabase.from('clients').select('*').in('id', clientIds);
-                    if (clientsData) {
-                        const mappedClients: Client[] = clientsData.map((c: any) => ({
-                            id: c.id,
-                            name: c.name,
-                            email: c.email,
-                            phone: c.phone,
-                            avatar: c.avatar || c.avatar_url || `https://ui-avatars.com/api/?name=${encodeURIComponent(c.name)}&background=random`,
-                            lastVisit: c.last_visit ? new Date(c.last_visit).toLocaleDateString() : 'Nuevo',
-                            isNew: false,
-                            role: c.role,
-                            profileId: c.profile_id
-                        }));
-                        setClients(mappedClients);
-                        localStorage.setItem('beautymanager_clients', JSON.stringify(mappedClients));
+                    if (role === 'admin') {
+                        setClients(allClients);
+                    } else if (role === 'professional' && apptsRes.data) {
+                        // Filter Clients: Verify strict Requirement: "Professional only sees THEIR clients"
+                        // Logic: Clients who have at least one appointment with this professional.
+
+                        // Find this professional's ID
+                        const myProId = mappedPros.find(p => p.email?.toLowerCase() === session.user.email?.toLowerCase())?.id;
+
+                        if (myProId) {
+                            // Get client IDs from appointments with this pro
+                            const myClientIds = new Set(
+                                apptsRes.data
+                                    .filter((a: any) => a.professional_id === myProId)
+                                    .map((a: any) => a.client_id)
+                            );
+
+                            // Also include clients created by this pro? Supabase policy lets them see all, 
+                            // but UI should filter. 
+                            // Current requirement: "solo sus clientes que han agendado con él mismo".
+                            const myClients = allClients.filter(c => myClientIds.has(c.id));
+                            setClients(myClients);
+                        } else {
+                            setClients([]);
+                        }
                     } else {
                         setClients([]);
-                        localStorage.setItem('beautymanager_clients', JSON.stringify([]));
                     }
-                } else {
-                    setClients([]);
-                    localStorage.setItem('beautymanager_clients', JSON.stringify([]));
                 }
-            } else {
-                // Clients or others don't see client list
-                setClients([]);
+
+                console.log(`Fetch completed in ${performance.now() - startTime}ms`);
+            } catch (err) {
+                console.error("Error fetching data:", err);
             }
-            console.log(`Fetch completed in ${performance.now() - startTime}ms`);
         };
 
         fetchData();
@@ -287,10 +300,6 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         return appointments.some(appt => {
             if (appt.id === currentApptId) return false;
             if (appt.status === 'cancelled') return false;
-
-            // Si estmos comprobando un conflicto para CONFIRMAR, solo chocamos con otros CONFIRMADOS
-            // Si estamos comprobando para CREAR, chocamos con TODO excepto cancelados (para evitar basura)
-            // Edit: Si el usuario quiere máxima seguridad, evitaremos solapar con cualquier cosa activa.
 
             if (appt.professionalId !== proId || !appt.date) return false;
 
@@ -322,7 +331,6 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         if (mMatch) durationMinutes += parseInt(mMatch[1]);
         if (!hMatch && !mMatch && appt.duration.includes('m')) durationMinutes = parseInt(appt.duration.replace('m', ''));
 
-        // Resolve Client ID if not provided but client email/name is available in 'clients' state
         // Resolve Client ID
         let finalClientId = appt.clientId;
 
@@ -339,8 +347,6 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         }
 
         // If STILL no client ID and we are a client, we might need to create a `clients` record 
-        // OR rely on the trigger? But trigger is on auth.users.
-        // Let's create a client record if missing for this user to ensure integrity.
         if (!finalClientId && role === 'client' && session?.user?.email) {
             const { data: newClient, error: createError } = await supabase.from('clients').insert({
                 name: userProfile.name || 'Cliente',
@@ -476,9 +482,6 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
             }
 
             setUserProfile(prev => ({ ...prev, ...data }));
-
-            // Refetch current data to update lists
-            // (Simple way: just update local state if we want to be fast, but DB sync already done)
         }
     };
 
