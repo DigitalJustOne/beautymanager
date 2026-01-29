@@ -1,5 +1,9 @@
+
 import React, { useState, useMemo, useEffect } from 'react';
 import { useData } from '../context/DataContext';
+import { formatPrice, formatDuration } from '../utils/format';
+import AppointmentDetailsModal from '../components/AppointmentDetailsModal';
+import { generateGoogleCalendarUrl } from '../services/calendarService';
 import { supabase } from '../services/supabase';
 
 const ClientDashboard: React.FC = () => {
@@ -62,13 +66,13 @@ const ClientDashboard: React.FC = () => {
         return minutes;
     }, [service, removalType]);
 
-    const formatDuration = (minutes: number) => {
-        const h = Math.floor(minutes / 60);
-        const m = minutes % 60;
-        if (h > 0 && m > 0) return `${h}h ${m}m`;
-        if (h > 0) return `${h}h`;
-        return `${m}m`;
-    };
+    // const formatDuration = (minutes: number) => { // Moved to utils/format
+    //     const h = Math.floor(minutes / 60);
+    //     const m = minutes % 60;
+    //     if (h > 0 && m > 0) return `${ h }h ${ m } m`;
+    //     if (h > 0) return `${ h } h`;
+    //     return `${ m } m`;
+    // };
 
     const getServiceBasePrice = (serviceName: string): number => {
         const found = services.find(s => s.name === serviceName);
@@ -83,7 +87,7 @@ const ClientDashboard: React.FC = () => {
         return price;
     }, [service, removalType]);
 
-    const formatPrice = (price: number) => `$${price.toLocaleString('es-CO')}`;
+    // const formatPrice = (price: number) => `$${ price.toLocaleString('es-CO') } `; // Moved to utils/format
 
     const getAppointmentStatus = (appt: any) => {
         if (appt.status === 'cancelled') {
@@ -176,7 +180,7 @@ const ClientDashboard: React.FC = () => {
         while (currentTotalMinutes + currentDurationMinutes <= endTotalMinutes) {
             const h = Math.floor(currentTotalMinutes / 60);
             const m = currentTotalMinutes % 60;
-            const timeString = `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}`;
+            const timeString = `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')} `;
             slots.push(timeString);
             currentTotalMinutes += step;
         }
@@ -237,24 +241,6 @@ const ClientDashboard: React.FC = () => {
         setIsEditing(false);
     };
 
-    const generateGoogleCalendarLink = (appt: { date: Date, time: string, service: string, professionalName: string, durationMinutes: number }) => {
-        const startTime = new Date(appt.date);
-        const [hours, minutes] = appt.time.split(':').map(Number);
-        startTime.setHours(hours, minutes, 0, 0);
-
-        const endTime = new Date(startTime.getTime() + appt.durationMinutes * 60000);
-
-        const formatForGoogle = (date: Date) => {
-            return date.toISOString().replace(/-|:|\.\d\d\d/g, "");
-        };
-
-        const title = encodeURIComponent(`Cita con ${appt.professionalName} - ${appt.service}`);
-        const details = encodeURIComponent(`Servicio: ${appt.service}\nProfesional: ${appt.professionalName}\nUbicación: BeautyPro`);
-        const location = encodeURIComponent("BeautyPro Salon");
-
-        return `https://calendar.google.com/calendar/render?action=TEMPLATE&text=${title}&details=${details}&location=${location}&dates=${formatForGoogle(startTime)}/${formatForGoogle(endTime)}`;
-    };
-
     const handleCreateAppointment = async (e: React.FormEvent) => {
         e.preventDefault();
         setFormError(null);
@@ -310,13 +296,7 @@ const ClientDashboard: React.FC = () => {
             console.warn("Error triggering notification:", emailErr);
         }
 
-        const link = generateGoogleCalendarLink({
-            date: selectedDate,
-            time: selectedTime,
-            service: serviceString,
-            professionalName: selectedPro?.name || 'Profesional',
-            durationMinutes: currentDurationMinutes
-        });
+        const link = generateGoogleCalendarUrl(newAppt);
 
         setIsSubmitting(false);
         setSuccessLink(link);
@@ -438,11 +418,11 @@ const ClientDashboard: React.FC = () => {
                                         onClick={() => setSelectedAppt(appt)}
                                         className="p-4 bg-background-light dark:bg-background-dark rounded-xl border border-border-light dark:border-border-dark border-l-4 border-l-primary hover:border-primary transition-all cursor-pointer group animate-in slide-in-from-right duration-300"
                                     >
-                                        <div className="flex justify-between items-start">
-                                            <div className="flex-1">
-                                                <div className="flex items-center gap-2 mb-1">
-                                                    <p className="font-bold text-text-main-light dark:text-text-main-dark group-hover:text-primary transition-colors">{appt.service}</p>
-                                                    <span className={`text-[10px] px-2 py-0.5 rounded-full font-black uppercase tracking-wider ${status.color}`}>
+                                        <div className="flex justify-between items-start gap-3">
+                                            <div className="flex-1 min-w-0">
+                                                <div className="flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-2 mb-1">
+                                                    <p className="font-bold text-text-main-light dark:text-text-main-dark group-hover:text-primary transition-colors truncate">{appt.service}</p>
+                                                    <span className={`self-start sm:self-auto text-[10px] px-2 py-0.5 rounded-full font-black uppercase tracking-wider ${status.color} whitespace-nowrap`}>
                                                         {status.label}
                                                     </span>
                                                 </div>
@@ -459,7 +439,7 @@ const ClientDashboard: React.FC = () => {
                                                     )}
                                                 </div>
                                             </div>
-                                            <div className="text-right flex flex-col items-end gap-1">
+                                            <div className="text-right flex flex-col items-end gap-1 shrink-0">
                                                 <p className="text-sm font-black text-green-600 dark:text-green-400">{appt.price || '$0'}</p>
                                                 <p className="text-[10px] text-text-sec-light font-bold flex items-center gap-1">
                                                     <span className="material-symbols-outlined text-[12px] text-slate-400">schedule</span>
@@ -594,10 +574,10 @@ const ClientDashboard: React.FC = () => {
                                             <div className="mt-2 p-3 bg-gray-50 dark:bg-slate-800/40 rounded-xl border border-dashed border-gray-200 dark:border-gray-700">
                                                 <span className="block text-[10px] font-black text-text-sec-light dark:text-text-sec-dark uppercase tracking-widest mb-2">¿Necesitas Retiro? (+30m)</span>
                                                 <div className="grid grid-cols-2 gap-2">
-                                                    <button type="button" onClick={() => setRemovalType('')} className={`px-2 py-2 text-xs rounded-lg font-bold border transition-all ${removalType === '' ? 'bg-gray-200 dark:bg-gray-700 text-gray-800 dark:text-white border-gray-300' : 'bg-white border-transparent'}`}>No</button>
-                                                    <button type="button" onClick={() => setRemovalType('semi')} className={`px-2 py-2 text-xs rounded-lg font-bold border transition-all truncate ${removalType === 'semi' ? 'bg-primary text-white border-primary shadow-sm' : 'bg-white border-gray-200 text-text-sec-light'}`}>Semi (+$10k)</button>
-                                                    <button type="button" onClick={() => setRemovalType('acrylic')} className={`px-2 py-2 text-xs rounded-lg font-bold border transition-all truncate ${removalType === 'acrylic' ? 'bg-purple-500 text-white border-purple-500 shadow-sm' : 'bg-white border-gray-200 text-text-sec-light'}`}>Acrílico (+$15k)</button>
-                                                    <button type="button" onClick={() => setRemovalType('feet')} className={`px-2 py-2 text-xs rounded-lg font-bold border transition-all truncate ${removalType === 'feet' ? 'bg-teal-500 text-white border-teal-500 shadow-sm' : 'bg-white border-gray-200 text-text-sec-light'}`}>Pies (+$8k)</button>
+                                                    <button type="button" onClick={() => setRemovalType('')} className={`px - 2 py - 2 text - xs rounded - lg font - bold border transition - all ${removalType === '' ? 'bg-gray-200 dark:bg-gray-700 text-gray-800 dark:text-white border-gray-300' : 'bg-white border-transparent'} `}>No</button>
+                                                    <button type="button" onClick={() => setRemovalType('semi')} className={`px - 2 py - 2 text - xs rounded - lg font - bold border transition - all truncate ${removalType === 'semi' ? 'bg-primary text-white border-primary shadow-sm' : 'bg-white border-gray-200 text-text-sec-light'} `}>Semi (+$10k)</button>
+                                                    <button type="button" onClick={() => setRemovalType('acrylic')} className={`px - 2 py - 2 text - xs rounded - lg font - bold border transition - all truncate ${removalType === 'acrylic' ? 'bg-purple-500 text-white border-purple-500 shadow-sm' : 'bg-white border-gray-200 text-text-sec-light'} `}>Acrílico (+$15k)</button>
+                                                    <button type="button" onClick={() => setRemovalType('feet')} className={`px - 2 py - 2 text - xs rounded - lg font - bold border transition - all truncate ${removalType === 'feet' ? 'bg-teal-500 text-white border-teal-500 shadow-sm' : 'bg-white border-gray-200 text-text-sec-light'} `}>Pies (+$8k)</button>
                                                 </div>
                                             </div>
                                         )}
@@ -637,10 +617,10 @@ const ClientDashboard: React.FC = () => {
                                                 type="button"
                                                 key={idx}
                                                 onClick={() => setSelectedDate(date)}
-                                                className={`snap-start shrink-0 flex flex-col items-center justify-center w-16 h-20 rounded-xl border transition-all duration-200 ${isDateSelected(date)
+                                                className={`snap - start shrink - 0 flex flex - col items - center justify - center w - 16 h - 20 rounded - xl border transition - all duration - 200 ${isDateSelected(date)
                                                     ? 'bg-primary border-primary text-white shadow-lg shadow-primary/30 scale-105'
                                                     : 'bg-white dark:bg-card-dark border-border-light dark:border-border-dark hover:border-primary text-text-sec-light dark:text-text-sec-dark hover:bg-primary/5'
-                                                    }`}
+                                                    } `}
                                             >
                                                 <span className="text-[10px] font-black uppercase tracking-tighter">{date.toLocaleDateString('es-ES', { weekday: 'short' })}</span>
                                                 <span className="text-xl font-black mt-1">{date.getDate()}</span>
@@ -650,7 +630,7 @@ const ClientDashboard: React.FC = () => {
                                 </div>
 
                                 {/* Time Selection */}
-                                <div className={`flex flex-col gap-2 transition-opacity duration-300 ${selectedDate ? 'opacity-100' : 'opacity-50 pointer-events-none'}`}>
+                                <div className={`flex flex - col gap - 2 transition - opacity duration - 300 ${selectedDate ? 'opacity-100' : 'opacity-50 pointer-events-none'} `}>
                                     <div className="flex items-center justify-between">
                                         <label className="text-sm font-black flex items-center gap-2">
                                             <span className="material-symbols-outlined text-primary text-[18px]">schedule</span>
@@ -669,12 +649,12 @@ const ClientDashboard: React.FC = () => {
                                                         key={time}
                                                         disabled={isOccupied}
                                                         onClick={() => { if (!isOccupied) setSelectedTime(time); }}
-                                                        className={`py-2 rounded-lg text-sm font-black border transition-all relative overflow-hidden ${selectedTime === time
+                                                        className={`py - 2 rounded - lg text - sm font - black border transition - all relative overflow - hidden ${selectedTime === time
                                                             ? 'bg-primary border-primary text-white shadow-md z-10'
                                                             : isOccupied
                                                                 ? 'bg-gray-100 border-gray-200 text-gray-400 cursor-not-allowed opacity-50'
                                                                 : 'bg-white border-border-light text-text-main-light hover:bg-primary/10 hover:border-primary'
-                                                            }`}
+                                                            } `}
                                                     >
                                                         {time}
                                                     </button>
@@ -716,73 +696,13 @@ const ClientDashboard: React.FC = () => {
                 </div>
             )}
 
-            {/* APPOINTMENT DETAIL MODAL */}
-            {selectedAppt && (
-                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4 animate-in fade-in" onClick={() => setSelectedAppt(null)}>
-                    <div className="bg-white dark:bg-card-dark rounded-3xl shadow-2xl w-full max-w-sm overflow-hidden animate-in zoom-in-95 duration-200 flex flex-col relative shadow-primary/10" onClick={(e) => e.stopPropagation()}>
-                        <div className="h-24 bg-primary w-full shrink-0 relative flex items-center justify-center">
-                            <button onClick={() => setSelectedAppt(null)} className="absolute top-4 right-4 bg-black/20 hover:bg-black/30 text-white rounded-full p-1.5 transition-colors backdrop-blur-sm z-10"><span className="material-symbols-outlined text-lg font-bold">close</span></button>
-                            <span className="text-white/20 font-black text-4xl select-none">BEAUTY MANAGER</span>
-                        </div>
-                        <div className="px-6 pb-8 flex flex-col bg-white dark:bg-card-dark text-center">
-                            <div className="-mt-12 mb-6 relative z-10 mx-auto">
-                                <div className="size-24 rounded-full border-[5px] border-white dark:border-card-dark bg-white dark:bg-slate-800 shadow-md flex items-center justify-center text-primary">
-                                    <span className="material-symbols-outlined text-5xl">spa</span>
-                                </div>
-                            </div>
-
-                            <div className="mb-6">
-                                <h3 className="text-2xl font-black text-text-main-light dark:text-white leading-tight">{selectedAppt.service}</h3>
-                                <div className="flex items-center justify-center gap-2 mt-2">
-                                    <span className={`px-4 py-1.5 rounded-full text-[10px] font-black uppercase tracking-widest ${getAppointmentStatus(selectedAppt).color}`}>
-                                        {getAppointmentStatus(selectedAppt).label}
-                                    </span>
-                                </div>
-                            </div>
-
-                            <div className="space-y-4 mb-8 text-left">
-                                <div className="flex items-center gap-4 bg-background-light dark:bg-background-dark p-4 rounded-3xl border border-border-light dark:border-border-dark shadow-sm">
-                                    <div className="size-11 rounded-2xl bg-green-100 dark:bg-green-900/30 flex items-center justify-center text-green-600 dark:text-green-400">
-                                        <span className="material-symbols-outlined">payments</span>
-                                    </div>
-                                    <div>
-                                        <p className="text-[10px] font-black text-text-sec-light uppercase tracking-widest">Inversión del Servicio</p>
-                                        <p className="font-black text-xl text-green-600 dark:text-green-400">{selectedAppt.price || '$0'}</p>
-                                    </div>
-                                </div>
-
-                                <div className="flex items-center gap-4 bg-background-light dark:bg-background-dark p-4 rounded-3xl border border-border-light dark:border-border-dark shadow-sm">
-                                    <div className="size-11 rounded-2xl bg-blue-100 dark:bg-blue-900/30 flex items-center justify-center text-blue-600 dark:text-blue-400">
-                                        <span className="material-symbols-outlined">event</span>
-                                    </div>
-                                    <div>
-                                        <p className="text-[10px] font-black text-text-sec-light uppercase tracking-widest">Fecha Agendada</p>
-                                        <p className="font-black text-sm capitalize">{selectedAppt.date?.toLocaleDateString('es-ES', { weekday: 'long', day: 'numeric', month: 'long' })}</p>
-                                        <p className="text-xs font-bold text-text-sec-light">{selectedAppt.time} ({selectedAppt.duration})</p>
-                                    </div>
-                                </div>
-
-                                <div className="flex items-center gap-4 bg-background-light dark:bg-background-dark p-4 rounded-3xl border border-border-light dark:border-border-dark shadow-sm">
-                                    <div className="size-11 rounded-2xl bg-primary/10 flex items-center justify-center text-primary">
-                                        <span className="material-symbols-outlined">badge</span>
-                                    </div>
-                                    <div>
-                                        <p className="text-[10px] font-black text-text-sec-light uppercase tracking-widest">Atendido por</p>
-                                        <p className="font-black text-sm text-primary">{selectedAppt.professionalName}</p>
-                                    </div>
-                                </div>
-                            </div>
-
-                            <button
-                                onClick={() => setSelectedAppt(null)}
-                                className="w-full py-4 bg-primary text-white rounded-2xl font-black shadow-lg shadow-primary/30 active:scale-95 transition-all text-sm uppercase tracking-widest"
-                            >
-                                Cerrar Detalle
-                            </button>
-                        </div>
-                    </div>
-                </div>
-            )}
+            {/* --- MODAL DETALLES UNIFICADO --- */}
+            <AppointmentDetailsModal
+                isOpen={!!selectedAppt}
+                onClose={() => setSelectedAppt(null)}
+                appointment={selectedAppt}
+                userRole={'client'}
+            />
         </div>
     );
 };

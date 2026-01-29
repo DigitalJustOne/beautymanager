@@ -3,12 +3,14 @@ import { useNavigate } from 'react-router-dom';
 import { useData } from '../context/DataContext';
 import { Appointment, Client } from '../types';
 import { generateGoogleCalendarUrl } from '../services/calendarService';
+import { formatPrice, formatDuration } from '../utils/format';
+import AppointmentDetailsModal from '../components/AppointmentDetailsModal';
 
 type ViewMode = 'day' | 'week' | 'month';
 
 const Agenda: React.FC = () => {
     const navigate = useNavigate();
-    const { appointments, clients, professionals, addAppointment, addClient, updateAppointmentStatus, deleteAppointment, userProfile } = useData();
+    const { appointments, clients, professionals, addAppointment, addClient, updateAppointmentStatus, deleteAppointment, userProfile, services } = useData();
 
     // --- ESTADOS DE VISTA Y NAVEGACIÓN ---
     const [viewMode, setViewMode] = useState<ViewMode>('week');
@@ -32,6 +34,10 @@ const Agenda: React.FC = () => {
 
     // NUEVO: Tipo de retiro
     const [removalType, setRemovalType] = useState<'' | 'semi' | 'acrylic' | 'feet'>('');
+
+    // NUEVO: Estados para confirmación exitosa (Unificación con ClientDashboard)
+    const [successLink, setSuccessLink] = useState<string | null>(null);
+    const [bookedApptDetails, setBookedApptDetails] = useState<any | null>(null);
 
     // Actualizar reloj y resetear hora al cambiar fecha
     useEffect(() => {
@@ -119,26 +125,10 @@ const Agenda: React.FC = () => {
         return { label: 'Pendiente', color: 'bg-orange-100 text-orange-700', bg: 'bg-orange-500' };
     };
 
-    // Helper para determinar duración EN MINUTOS
+    // Helper para determinar duración EN MINUTOS (Dinámico desde DB)
     const getServiceBaseMinutes = (serviceName: string) => {
-        const durations: { [key: string]: number } = {
-            'Corte de Cabello': 60,
-            'Esmaltado Tradicional': 60,
-            'Semipermanente Hombre': 60,
-            'Semipermanente Pies': 60,
-            'Semipermanente Manos': 120, // 2 horas
-            'Nivelación Base Ruber': 120,
-            'Builder Gel': 150,
-            'Dipping': 120,
-            'Soft Gel': 150,
-            'Retiro (Solo Retiro)': 30,
-            'Depilación de Axilas': 20,
-            'Epilación de Cejas': 20,
-            'Epilación de Bozo': 15,
-            'Epilación y Sombreado de Cejas en Henna': 45,
-            'Masaje Relajante': 60
-        };
-        return durations[serviceName] || 60;
+        const found = services.find(s => s.name === serviceName);
+        return found ? found.duration : 60;
     };
 
     const currentDurationMinutes = useMemo(() => {
@@ -150,34 +140,12 @@ const Agenda: React.FC = () => {
         return minutes;
     }, [service, removalType]);
 
-    const formatDuration = (minutes: number) => {
-        const h = Math.floor(minutes / 60);
-        const m = minutes % 60;
-        if (h > 0 && m > 0) return `${h}h ${m}m`;
-        if (h > 0) return `${h}h`;
-        return `${m}m`;
-    };
 
-    // Helper para obtener precio base (AUMENTO 10K)
+
+    // Helper para obtener precio base (Dinámico desde DB)
     const getServiceBasePrice = (serviceName: string): number => {
-        const prices: { [key: string]: number } = {
-            'Corte de Cabello': 35000,
-            'Esmaltado Tradicional': 30000,
-            'Semipermanente Hombre': 35000,
-            'Semipermanente Pies': 48000,
-            'Semipermanente Manos': 55000,
-            'Nivelación Base Ruber': 70000,
-            'Builder Gel': 80000,
-            'Dipping': 80000,
-            'Soft Gel': 85000,
-            'Retiro (Solo Retiro)': 20000,
-            'Depilación de Axilas': 25000,
-            'Epilación de Cejas': 25000,
-            'Epilación de Bozo': 18000,
-            'Epilación y Sombreado de Cejas en Henna': 35000,
-            'Masaje Relajante': 90000
-        };
-        return prices[serviceName] || 0;
+        const found = services.find(s => s.name === serviceName);
+        return found ? found.price : 0;
     };
 
     // Calcular precio TOTAL (Base + Retiro específico)
@@ -192,9 +160,7 @@ const Agenda: React.FC = () => {
         return price;
     }, [service, removalType]);
 
-    const formatPrice = (price: number) => {
-        return `$${price.toLocaleString('es-CO')}`;
-    };
+
 
     // --- LÓGICA DE NAVEGACIÓN (Funcionalidad solicitada) ---
     const navigateDate = (direction: 'prev' | 'next') => {
@@ -368,6 +334,21 @@ const Agenda: React.FC = () => {
         }
     }, [existingClient]);
 
+    const resetModal = () => {
+        setIsModalOpen(false);
+        setSuccessLink(null);
+        setBookedApptDetails(null);
+        setClientName('');
+        setClientPhone('');
+        setClientEmail('');
+        setService('Semipermanente Manos');
+        setRemovalType('');
+        setSelectedProfessionalId('');
+        setSelectedDate(null);
+        setSelectedTime(null);
+        setFormError(null);
+    };
+
     const handleCreateAppointment = async (e: React.FormEvent) => {
         e.preventDefault();
         setFormError(null);
@@ -452,26 +433,12 @@ const Agenda: React.FC = () => {
 
             await addAppointment(newAppt);
 
-            // Preguntar si desea sincronizar con Google Calendar
-            if (window.confirm(`¡Solicitud registrada!\nTotal a pagar: ${finalPriceString}\n\n¿Deseas agregar este evento a Google Calendar ahora?`)) {
-                const calendarUrl = generateGoogleCalendarUrl(newAppt);
-                if (calendarUrl) {
-                    window.open(calendarUrl, '_blank');
-                }
-            } else {
-                alert(`Cita registrada correctamente.`);
-            }
+            // Generar Link y Mostrar Éxito
+            const calendarUrl = generateGoogleCalendarUrl(newAppt);
+            setSuccessLink(calendarUrl);
+            setBookedApptDetails(newAppt);
 
-            // Reset
-            setIsModalOpen(false);
-            setClientName('');
-            setClientPhone('');
-            setClientEmail('');
-            setService('Semipermanente Manos');
-            setRemovalType(''); // Reset retiro
-            setSelectedProfessionalId('');
-            setSelectedDate(null);
-            setSelectedTime(null);
+            // NO cerramos el modal, mostramos UI de éxito
         } catch (error) {
             console.error("Error creating appointment:", error);
             setFormError("Ocurrió un error al crear la cita.");
@@ -793,422 +760,378 @@ const Agenda: React.FC = () => {
             {/* View Render */}
             {viewMode === 'month' ? renderMonthGrid() : renderTimeGrid()}
 
-            {/* --- MODAL DETALLES (Existente) --- */}
-            {selectedAppointment && (
-                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4 animate-in fade-in duration-200" onClick={() => setSelectedAppointment(null)}>
-                    <div className="bg-white dark:bg-card-dark rounded-2xl shadow-2xl w-full max-w-sm overflow-hidden border border-border-light dark:border-border-dark animate-in zoom-in-95 duration-200" onClick={(e) => e.stopPropagation()}>
-                        <div className="h-24 bg-primary relative">
-                            <button onClick={() => setSelectedAppointment(null)} className="absolute top-4 right-4 bg-black/20 hover:bg-black/40 text-white rounded-full p-1 transition-colors"><span className="material-symbols-outlined text-lg">close</span></button>
-                        </div>
-                        <div className="px-6 pb-6 relative">
-                            <div className="size-20 rounded-full border-4 border-white dark:border-card-dark bg-cover bg-center -mt-10 mb-4 bg-gray-200" style={{ backgroundImage: `url("${selectedAppointment.avatar}")` }}></div>
-                            <h3 className="text-xl font-bold text-slate-900 dark:text-white">{selectedAppointment.client}</h3>
-                            <p className="text-slate-500 dark:text-slate-400 text-sm mb-6">{selectedAppointment.service}</p>
+            {/* --- MODAL DETALLES UNIFICADO --- */}
+            <AppointmentDetailsModal
+                isOpen={!!selectedAppointment}
+                onClose={() => setSelectedAppointment(null)}
+                appointment={selectedAppointment}
+                userRole={userProfile.role}
+                onConfirm={selectedAppointment?.status === 'pending' ? () => {
+                    updateAppointmentStatus(selectedAppointment.id, 'confirmed');
+                    setSelectedAppointment(null);
+                } : undefined}
+                onCancel={(selectedAppointment?.status === 'pending' || selectedAppointment?.status === 'confirmed') ? () => {
+                    if (window.confirm('¿Estás seguro de cancelar esta cita?')) {
+                        updateAppointmentStatus(selectedAppointment.id, 'cancelled');
+                        setSelectedAppointment(null);
+                    }
+                } : undefined}
+            />
 
-                            <div className="bg-slate-50 dark:bg-slate-800/50 rounded-xl p-4 border border-slate-100 dark:border-slate-800 mb-6">
-                                <div className="flex justify-between items-center border-b border-slate-200 dark:border-slate-700 pb-3 mb-3">
-                                    <span className="text-xs text-slate-500 uppercase font-bold">Fecha</span>
-                                    <span className="text-sm font-medium dark:text-gray-200">{selectedAppointment.date?.toLocaleDateString()}</span>
-                                </div>
-                                <div className="flex justify-between items-center border-b border-slate-200 dark:border-slate-700 pb-3 mb-3">
-                                    <span className="text-xs text-slate-500 uppercase font-bold">Horario</span>
-                                    <span className="text-sm font-medium dark:text-gray-200">{selectedAppointment.time}</span>
-                                </div>
-                                <div className="flex justify-between items-center border-b border-slate-200 dark:border-slate-700 pb-3 mb-3">
-                                    <span className="text-xs text-slate-500 uppercase font-bold">Profesional</span>
-                                    <span className="text-sm font-medium dark:text-gray-200">{selectedAppointment.professionalName || 'No asignado'}</span>
-                                </div>
-                                {/* PRICE ROW */}
-                                <div className="flex justify-between items-center border-b border-slate-200 dark:border-slate-700 pb-3 mb-3">
-                                    <span className="text-xs text-slate-500 uppercase font-bold">Precio</span>
-                                    <span className="text-lg font-black text-green-600 dark:text-green-400">{selectedAppointment.price || 'N/A'}</span>
-                                </div>
-                                <div className="flex justify-between items-center">
-                                    <span className="text-xs text-slate-500 uppercase font-bold">Estado</span>
-                                    {/* Estado Dinámico */}
-                                    {(() => {
-                                        const status = getAppointmentStatus(selectedAppointment);
-                                        return (
-                                            <span className={`text-[10px] px-2 py-1 rounded-full font-bold ${status.color}`}>
-                                                {status.label}
-                                            </span>
-                                        );
-                                    })()}
-                                </div>
+            {/* --- MODAL NUEVA CITA (Unificado) --- */}
+            {
+                isModalOpen && (
+                    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4 animate-in fade-in duration-200" onClick={(e) => e.stopPropagation()}>
+                        <div className="bg-card-light dark:bg-card-dark rounded-2xl shadow-2xl w-full max-w-xl overflow-hidden border border-border-light dark:border-border-dark animate-in zoom-in-95 duration-200 max-h-[90vh] flex flex-col">
+                            <div className="p-4 bg-primary text-white flex justify-between items-center shrink-0">
+                                <h3 className="font-bold text-lg">{successLink ? '¡Todo Listo!' : 'Nueva Cita'}</h3>
+                                <button onClick={resetModal}><span className="material-symbols-outlined">close</span></button>
                             </div>
 
-                            {/* ACTION BUTTONS (Unified Design) */}
-                            <div className="flex gap-3 mb-4">
-                                {getAppointmentStatus(selectedAppointment).label === 'Pendiente' && (
-                                    <button
-                                        onClick={() => { updateAppointmentStatus(selectedAppointment.id, 'confirmed'); setSelectedAppointment(null); }}
-                                        className="flex-1 py-2.5 bg-green-100 text-green-700 hover:bg-green-200 rounded-xl font-bold text-sm transition-colors flex items-center justify-center gap-1"
-                                    >
-                                        <span className="material-symbols-outlined text-[18px]">check</span>
-                                        Confirmar
-                                    </button>
-                                )}
-                                {(getAppointmentStatus(selectedAppointment).label === 'Pendiente' || getAppointmentStatus(selectedAppointment).label === 'Confirmado') && (
-                                    <button
-                                        onClick={() => {
-                                            if (window.confirm('¿Estás seguro de cancelar esta cita?')) {
-                                                deleteAppointment(selectedAppointment.id);
-                                                setSelectedAppointment(null);
-                                            }
-                                        }}
-                                        className="flex-1 py-2.5 bg-red-100 text-red-700 hover:bg-red-200 rounded-xl font-bold text-sm transition-colors flex items-center justify-center gap-1"
-                                    >
-                                        <span className="material-symbols-outlined text-[18px]">cancel</span>
-                                        Cancelar
-                                    </button>
-                                )}
-                            </div>
-
-                            {(() => {
-                                const client = getClientInfo(selectedAppointment.client);
-                                return client && (
-                                    <div className="flex gap-3">
-                                        <a href={`tel:${client.phone}`} className="flex-1 flex items-center justify-center gap-2 bg-green-500 hover:bg-green-600 text-white py-2.5 rounded-xl font-bold text-sm shadow-lg shadow-green-500/20"><span className="material-symbols-outlined text-[18px]">call</span>Llamar</a>
-                                        <a href={`mailto:${client.email}`} className="flex-1 flex items-center justify-center gap-2 bg-blue-500 hover:bg-blue-600 text-white py-2.5 rounded-xl font-bold text-sm shadow-lg shadow-blue-500/20"><span className="material-symbols-outlined text-[18px]">mail</span>Email</a>
+                            {successLink ? (
+                                <div className="p-8 flex flex-col items-center gap-6 text-center animate-in fade-in zoom-in duration-300 overflow-y-auto scrollbar-hide">
+                                    <div className="size-20 bg-green-100 dark:bg-green-900/30 text-green-600 dark:text-green-400 rounded-full flex items-center justify-center mb-2">
+                                        <span className="material-symbols-outlined text-5xl">check_circle</span>
                                     </div>
-                                );
-                            })()}
-                        </div>
-                    </div>
-                </div>
-            )}
-
-            {/* --- MODAL NUEVA CITA (Agregado desde Dashboard) --- */}
-            {isModalOpen && (
-                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4 animate-in fade-in duration-200" onClick={(e) => e.stopPropagation()}>
-                    <div className="bg-card-light dark:bg-card-dark rounded-2xl shadow-2xl w-full max-w-xl overflow-hidden border border-border-light dark:border-border-dark animate-in zoom-in-95 duration-200 max-h-[90vh] flex flex-col">
-                        <div className="p-4 border-b border-border-light dark:border-border-dark flex justify-between items-center bg-primary text-white shrink-0">
-                            <div className="flex items-center gap-2">
-                                <span className="material-symbols-outlined">add_circle</span>
-                                <h3 className="font-bold text-lg">Nueva Cita</h3>
-                            </div>
-                            <button
-                                onClick={() => setIsModalOpen(false)}
-                                className="hover:bg-white/20 rounded-full p-1 transition-colors"
-                            >
-                                <span className="material-symbols-outlined">close</span>
-                            </button>
-                        </div>
-
-                        <form onSubmit={handleCreateAppointment} className="flex-1 overflow-y-auto p-6 flex flex-col gap-5 scrollbar-hide">
-                            <div className="bg-blue-50 dark:bg-blue-900/20 p-4 rounded-xl flex items-start gap-3 border border-blue-100 dark:border-blue-900/30">
-                                <span className="material-symbols-outlined text-blue-500 mt-0.5">info</span>
-                                <p className="text-sm text-blue-800 dark:text-blue-200">
-                                    Se registrará automáticamente el cliente si es nuevo y se enviará la invitación de calendario.
-                                </p>
-                            </div>
-
-                            {/* ERROR NOTIFICATION BANNER */}
-                            {formError && (
-                                <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 text-red-600 dark:text-red-300 p-4 rounded-xl flex gap-3 animate-in fade-in slide-in-from-top-1">
-                                    <span className="material-symbols-outlined shrink-0">error</span>
-                                    <div className="flex flex-col">
-                                        <span className="font-bold text-sm">No se pudo agendar la cita</span>
-                                        <span className="text-xs">{formError}</span>
+                                    <div className="mb-2">
+                                        <h4 className="text-2xl font-black mb-1">¡Cita Registrada!</h4>
+                                        <p className="text-text-sec-light">El servicio ha sido agendado exitosamente.</p>
                                     </div>
+
+                                    <div className="w-full bg-background-light dark:bg-background-dark rounded-2xl p-6 border border-border-light dark:border-border-dark flex flex-col gap-4 text-left shadow-sm">
+                                        <div className="flex justify-between items-start">
+                                            <div>
+                                                <p className="text-[10px] font-bold text-text-sec-light uppercase tracking-widest mb-1">Servicio</p>
+                                                <p className="font-bold text-lg leading-tight">{bookedApptDetails?.service}</p>
+                                            </div>
+                                            <div className="text-right">
+                                                <p className="text-[10px] font-bold text-text-sec-light uppercase tracking-widest mb-1">Precio</p>
+                                                <p className="font-black text-xl text-green-600 dark:text-green-400">{bookedApptDetails?.price}</p>
+                                            </div>
+                                        </div>
+                                        <div className="flex justify-between border-t border-border-light dark:border-border-dark pt-4">
+                                            <div>
+                                                <p className="text-[10px] font-bold text-text-sec-light uppercase tracking-widest mb-1">Fecha y Hora</p>
+                                                <p className="text-sm font-bold capitalize">{bookedApptDetails?.date?.toLocaleDateString('es-ES', { weekday: 'long', day: 'numeric', month: 'long' })} • {bookedApptDetails?.time}</p>
+                                            </div>
+                                            <div className="text-right">
+                                                <p className="text-[10px] font-bold text-text-sec-light uppercase tracking-widest mb-1">Especialista</p>
+                                                <p className="text-sm font-bold text-primary">{bookedApptDetails?.professionalName}</p>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <a
+                                        href={successLink}
+                                        target="_blank"
+                                        rel="noreferrer"
+                                        className="flex items-center gap-3 px-6 py-4 bg-white dark:bg-card-dark border border-gray-200 dark:border-border-dark shadow-sm rounded-2xl hover:bg-gray-50 dark:hover:bg-slate-800 transition-all group w-full justify-center"
+                                    >
+                                        <img src="https://upload.wikimedia.org/wikipedia/commons/a/a5/Google_Calendar_icon_%282020%29.svg" alt="Google Calendar" className="w-8 h-8 group-hover:scale-110 transition-transform" />
+                                        <div className="text-left font-bold">
+                                            <p className="text-gray-800 dark:text-gray-200">Agregar a Google Calendar</p>
+                                            <p className="text-[10px] text-gray-500 uppercase tracking-widest">Recordatorio automático</p>
+                                        </div>
+                                    </a>
+
+                                    <button onClick={resetModal} className="text-primary font-bold hover:underline py-2">Volver al Calendario</button>
                                 </div>
+                            ) : (
+                                <form onSubmit={handleCreateAppointment} className="flex-1 overflow-y-auto p-6 flex flex-col gap-5 scrollbar-hide">
+                                    <div className="bg-blue-50 dark:bg-blue-900/20 p-4 rounded-xl flex items-start gap-3 border border-blue-100 dark:border-blue-900/30">
+                                        <span className="material-symbols-outlined text-blue-500 mt-0.5">info</span>
+                                        <p className="text-sm text-blue-800 dark:text-blue-200">
+                                            Se registrará automáticamente el cliente si es nuevo y se enviará la invitación de calendario.
+                                        </p>
+                                    </div>
+
+                                    {formError && (
+                                        <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 text-red-600 dark:text-red-300 p-4 rounded-xl flex gap-3 animate-in fade-in slide-in-from-top-1">
+                                            <span className="material-symbols-outlined shrink-0">error</span>
+                                            <div className="flex flex-col">
+                                                <span className="font-bold text-sm">No se pudo agendar la cita</span>
+                                                <span className="text-xs">{formError}</span>
+                                            </div>
+                                        </div>
+                                    )}
+
+                                    {/* Contacto: Teléfono y Email */}
+                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                        <div className="flex flex-col gap-2">
+                                            <label className="text-sm font-bold text-text-main-light dark:text-text-main-dark">Celular </label>
+                                            <div className="relative">
+                                                <span className="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-text-sec-light">smartphone</span>
+                                                <input
+                                                    required
+                                                    type="tel"
+                                                    pattern="[0-9]{10}"
+                                                    maxLength={10}
+                                                    value={clientPhone}
+                                                    onChange={handlePhoneChange}
+                                                    placeholder="Ej: 5512345678"
+                                                    className="w-full rounded-xl border border-border-light dark:border-border-dark bg-background-light dark:bg-background-dark pl-10 pr-4 h-12 text-sm focus:border-primary focus:ring-1 focus:ring-primary dark:text-white outline-none transition-all"
+                                                />
+                                            </div>
+                                            {existingClient && (
+                                                <div className="flex items-center gap-2 text-xs text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-900/20 p-2 rounded-lg mt-1 border border-blue-100 dark:border-blue-800">
+                                                    <span className="material-symbols-outlined text-sm">verified</span>
+                                                    <span>Este número es de <strong>{existingClient.name}</strong></span>
+                                                </div>
+                                            )}
+                                        </div>
+                                        <div className="flex flex-col gap-2">
+                                            <label className="text-sm font-bold text-text-main-light dark:text-text-main-dark">Correo Electrónico</label>
+                                            <div className="relative">
+                                                <span className="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-text-sec-light">mail</span>
+                                                <input
+                                                    required
+                                                    type="email"
+                                                    value={clientEmail}
+                                                    onChange={(e) => setClientEmail(e.target.value)}
+                                                    placeholder="cliente@ejemplo.com"
+                                                    className="w-full rounded-xl border border-border-light dark:border-border-dark bg-background-light dark:bg-background-dark pl-10 pr-4 h-12 text-sm focus:border-primary focus:ring-1 focus:ring-primary dark:text-white outline-none transition-all"
+                                                />
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    {/* Cliente */}
+                                    <div className="flex flex-col gap-2">
+                                        <label className="text-sm font-bold text-text-main-light dark:text-text-main-dark">Nombre del Cliente</label>
+                                        <div className="relative">
+                                            <span className="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-text-sec-light">person</span>
+                                            <input
+                                                required
+                                                type="text"
+                                                value={clientName}
+                                                onChange={(e) => setClientName(e.target.value)}
+                                                placeholder="Nombre completo"
+                                                className="w-full rounded-xl border border-border-light dark:border-border-dark bg-background-light dark:bg-background-dark pl-10 pr-4 h-12 text-sm focus:border-primary focus:ring-1 focus:ring-primary dark:text-white outline-none transition-all"
+                                                readOnly={!!existingClient} // Bloquear si existe
+                                            />
+                                            {existingClient && <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-blue-500 font-bold bg-white dark:bg-card-dark px-1">Autocompletado</span>}
+                                        </div>
+                                    </div>
+
+                                    {/* PRICE DISPLAY BANNER */}
+                                    <div className="flex items-center justify-center bg-green-50 dark:bg-green-900/10 border border-green-200 dark:border-green-800 rounded-2xl p-4 my-2">
+                                        <div className="text-center">
+                                            <span className="block text-xs font-bold text-green-600 dark:text-green-400 uppercase tracking-wider mb-1">Valor Total del Servicio</span>
+                                            <span className="block text-4xl font-black text-green-600 dark:text-green-400 tracking-tight">{formatPrice(currentTotalPrice)}</span>
+                                        </div>
+                                    </div>
+
+                                    {/* Servicio y Profesional */}
+                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                        <div className="flex flex-col gap-2">
+                                            <label className="text-sm font-bold text-text-main-light dark:text-text-main-dark">Servicio</label>
+                                            <div className="relative">
+                                                <span className="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-text-sec-light">spa</span>
+                                                <select
+                                                    value={service}
+                                                    onChange={(e) => setService(e.target.value)}
+                                                    className="w-full rounded-xl border border-border-light dark:border-border-dark bg-background-light dark:bg-background-dark pl-10 pr-4 h-12 text-sm focus:border-primary focus:ring-1 focus:ring-primary dark:text-white outline-none transition-all appearance-none truncate"
+                                                >
+                                                    {/* DYNAMIC OPTIONS */}
+                                                    {Array.from(new Set(services.map(s => s.category))).map(cat => (
+                                                        <optgroup key={cat} label={cat}>
+                                                            {services.filter(s => s.category === cat).map(s => (
+                                                                <option key={s.id} value={s.name}>{s.name}</option>
+                                                            ))}
+                                                        </optgroup>
+                                                    ))}
+                                                </select>
+                                                <span className="material-symbols-outlined absolute right-3 top-1/2 -translate-y-1/2 text-text-sec-light pointer-events-none">expand_more</span>
+                                            </div>
+
+                                            {!service.includes('Retiro') && !service.includes('Corte') && !service.includes('Masaje') && !service.includes('Depilación') && !service.includes('Epilación') && (
+                                                <div className="mt-2 p-3 bg-gray-50 dark:bg-card-dark rounded-xl border border-dashed border-gray-200 dark:border-gray-700">
+                                                    <span className="block text-xs font-bold text-text-sec-light dark:text-text-sec-dark uppercase mb-2">¿Incluir Retiro? (+30m)</span>
+                                                    <div className="grid grid-cols-2 gap-2">
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => setRemovalType('')}
+                                                            className={`px-2 py-2 text-xs rounded-lg font-bold border transition-all ${removalType === ''
+                                                                ? 'bg-gray-200 dark:bg-gray-700 text-gray-800 dark:text-white border-gray-300 dark:border-gray-600'
+                                                                : 'bg-white dark:bg-background-dark text-gray-500 border-transparent hover:border-gray-200'
+                                                                }`}
+                                                        >
+                                                            No
+                                                        </button>
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => setRemovalType('semi')}
+                                                            className={`px-2 py-2 text-xs rounded-lg font-bold border transition-all truncate ${removalType === 'semi'
+                                                                ? 'bg-primary text-white border-primary shadow-sm'
+                                                                : 'bg-white dark:bg-background-dark text-gray-600 dark:text-gray-400 border-gray-200 dark:border-gray-700 hover:border-primary/50'
+                                                                }`}
+                                                        >
+                                                            Semi (+$10k)
+                                                        </button>
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => setRemovalType('acrylic')}
+                                                            className={`px-2 py-2 text-xs rounded-lg font-bold border transition-all truncate ${removalType === 'acrylic'
+                                                                ? 'bg-purple-500 text-white border-purple-500 shadow-sm'
+                                                                : 'bg-white dark:bg-background-dark text-gray-600 dark:text-gray-400 border-gray-200 dark:border-gray-700 hover:border-purple-500/50'
+                                                                }`}
+                                                        >
+                                                            Acrílico (+$15k)
+                                                        </button>
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => setRemovalType('feet')}
+                                                            className={`px-2 py-2 text-xs rounded-lg font-bold border transition-all truncate ${removalType === 'feet'
+                                                                ? 'bg-teal-500 text-white border-teal-500 shadow-sm'
+                                                                : 'bg-white dark:bg-background-dark text-gray-600 dark:text-gray-400 border-gray-200 dark:border-gray-700 hover:border-teal-500/50'
+                                                                }`}
+                                                        >
+                                                            Pies (+$8k)
+                                                        </button>
+                                                    </div>
+                                                </div>
+                                            )}
+                                        </div>
+
+                                        <div className="flex flex-col gap-2">
+                                            <label className="text-sm font-bold text-text-main-light dark:text-text-main-dark">Profesional</label>
+                                            <div className="relative">
+                                                <span className="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-text-sec-light">badge</span>
+                                                <select
+                                                    value={selectedProfessionalId}
+                                                    onChange={(e) => setSelectedProfessionalId(Number(e.target.value))}
+                                                    required
+                                                    disabled={userProfile.role === 'professional'}
+                                                    className="w-full rounded-xl border border-border-light dark:border-border-dark bg-background-light dark:bg-background-dark pl-10 pr-4 h-12 text-sm focus:border-primary focus:ring-1 focus:ring-primary dark:text-white outline-none transition-all appearance-none disabled:opacity-50 disabled:cursor-not-allowed"
+                                                >
+                                                    <option value="" disabled>Seleccionar...</option>
+                                                    {availableProfessionals.map(pro => (
+                                                        <option key={pro.id} value={pro.id}>{pro.name}</option>
+                                                    ))}
+                                                </select>
+                                                <span className="material-symbols-outlined absolute right-3 top-1/2 -translate-y-1/2 text-text-sec-light pointer-events-none">expand_more</span>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <div className="border-t border-border-light dark:border-border-dark my-1"></div>
+
+                                    {/* Date Selection Grid */}
+                                    <div className="flex flex-col gap-2">
+                                        <label className="text-sm font-bold text-text-main-light dark:text-text-main-dark flex items-center gap-2">
+                                            <span className="material-symbols-outlined text-primary text-[18px]">calendar_month</span>
+                                            Selecciona Fecha Disponible
+                                        </label>
+                                        <div className="flex overflow-x-auto gap-2 pb-2 scrollbar-hide snap-x">
+                                            {availableDays.length > 0 ? (
+                                                availableDays.map((date, idx) => (
+                                                    <button
+                                                        type="button"
+                                                        key={idx}
+                                                        onClick={() => setSelectedDate(date)}
+                                                        className={`snap-start shrink-0 flex flex-col items-center justify-center w-16 h-20 rounded-xl border transition-all duration-200 ${isDateSelected(date)
+                                                            ? 'bg-primary border-primary text-white shadow-lg shadow-primary/30 scale-105'
+                                                            : 'bg-white dark:bg-card-dark border-border-light dark:border-border-dark hover:border-primary text-text-sec-light dark:text-text-sec-dark hover:bg-primary/5'
+                                                            }`}
+                                                    >
+                                                        <span className="text-xs font-medium uppercase">{date.toLocaleDateString('es-ES', { weekday: 'short' })}</span>
+                                                        <span className="text-xl font-black mt-1">{date.getDate()}</span>
+                                                    </button>
+                                                ))
+                                            ) : (
+                                                <div className="w-full text-center py-4 text-sm text-gray-500 bg-gray-50 dark:bg-gray-800 rounded-xl border border-dashed border-gray-200 dark:border-gray-700">
+                                                    No hay fechas disponibles próximas según el horario de apertura.
+                                                </div>
+                                            )}
+                                        </div>
+                                    </div>
+
+                                    {/* Time Selection Grid */}
+                                    <div className={`flex flex-col gap-2 transition-opacity duration-300 ${selectedDate ? 'opacity-100' : 'opacity-50 pointer-events-none'}`}>
+                                        <div className="flex items-center justify-between">
+                                            <label className="text-sm font-bold text-text-main-light dark:text-text-main-dark flex items-center gap-2">
+                                                <span className="material-symbols-outlined text-primary text-[18px]">schedule</span>
+                                                Selecciona Hora
+                                                {!selectedDate && <span className="text-xs font-normal text-red-500 ml-2">(Elige una fecha primero)</span>}
+                                                {/* Display Estimated Duration */}
+                                                <span className="text-xs font-bold bg-blue-100 text-blue-700 px-2 py-0.5 rounded ml-2">Duración: {formatDuration(currentDurationMinutes)}</span>
+                                            </label>
+
+                                            {/* Leyenda de Disponibilidad */}
+                                            <div className="flex gap-3 text-[10px] text-text-sec-light dark:text-text-sec-dark">
+                                                <div className="flex items-center gap-1"><span className="size-2 rounded-full bg-white border border-gray-300"></span>Libre</div>
+                                                <div className="flex items-center gap-1"><span className="size-2 rounded-full bg-primary"></span>Elegido</div>
+                                                <div className="flex items-center gap-1"><span className="size-2 rounded-full bg-gray-100 dark:bg-gray-700 border border-gray-200"></span>Ocupado</div>
+                                            </div>
+                                        </div>
+
+                                        <div className="grid grid-cols-4 gap-2">
+                                            {timeSlots.length > 0 ? (
+                                                timeSlots.map((time) => {
+                                                    const isOccupied = isSlotOccupied(time);
+                                                    return (
+                                                        <button
+                                                            type="button"
+                                                            key={time}
+                                                            disabled={isOccupied}
+                                                            onClick={() => {
+                                                                if (!isOccupied) setSelectedTime(time);
+                                                            }}
+                                                            className={`py-2 rounded-lg text-sm font-bold border transition-all relative overflow-hidden ${selectedTime === time
+                                                                ? 'bg-primary border-primary text-white shadow-md z-10'
+                                                                : isOccupied
+                                                                    ? 'bg-gray-100 dark:bg-gray-800 border-gray-200 dark:border-gray-700 text-gray-400 dark:text-gray-600 cursor-not-allowed'
+                                                                    : 'bg-white dark:bg-card-dark border-border-light dark:border-border-dark text-text-main-light dark:text-text-main-dark hover:bg-primary/10 hover:border-primary'
+                                                                }`}
+                                                        >
+                                                            {time}
+                                                            {isOccupied && <span className="absolute inset-0 flex items-center justify-center bg-gray-200/50 dark:bg-black/50"><span className="material-symbols-outlined text-xs">block</span></span>}
+                                                        </button>
+                                                    );
+                                                })
+                                            ) : (
+                                                selectedDate && (
+                                                    <div className="col-span-4 text-center py-4 text-sm text-orange-500 bg-orange-50 dark:bg-orange-900/20 rounded-xl border border-orange-100 dark:border-orange-900/30">
+                                                        No hay horarios disponibles para este día con la duración requerida ({formatDuration(currentDurationMinutes)}).
+                                                    </div>
+                                                )
+                                            )}
+                                        </div>
+                                    </div>
+
+                                    <div className="flex gap-3 mt-4 pt-4 border-t border-border-light dark:border-border-dark">
+                                        <button
+                                            type="button"
+                                            onClick={resetModal}
+                                            disabled={isSubmitting}
+                                            className="flex-1 py-3 rounded-xl font-bold text-text-sec-light dark:text-text-sec-dark hover:bg-background-light dark:hover:bg-background-dark transition-colors disabled:opacity-50"
+                                        >
+                                            Cancelar
+                                        </button>
+                                        <button
+                                            type="submit"
+                                            disabled={!selectedDate || !selectedTime || !clientName || !clientEmail || clientPhone.length < 10 || !selectedProfessionalId || isSubmitting}
+                                            className="flex-1 py-3 rounded-xl bg-primary text-white font-bold hover:bg-primary/90 transition-colors shadow-lg shadow-primary/20 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                                        >
+                                            {isSubmitting ? (
+                                                <>
+                                                    <span className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></span>
+                                                    <span>Procesando...</span>
+                                                </>
+                                            ) : (
+                                                <>
+                                                    <span className="material-symbols-outlined text-[20px]">send</span>
+                                                    <span>Agendar y Enviar</span>
+                                                </>
+                                            )}
+                                        </button>
+                                    </div>
+                                </form>
                             )}
-
-                            {/* Contacto: Teléfono y Email */}
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                <div className="flex flex-col gap-2">
-                                    <label className="text-sm font-bold text-text-main-light dark:text-text-main-dark">Celular </label>
-                                    <div className="relative">
-                                        <span className="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-text-sec-light">smartphone</span>
-                                        <input
-                                            required
-                                            type="tel"
-                                            pattern="[0-9]{10}"
-                                            maxLength={10}
-                                            value={clientPhone}
-                                            onChange={handlePhoneChange}
-                                            placeholder="Ej: 5512345678"
-                                            className="w-full rounded-xl border border-border-light dark:border-border-dark bg-background-light dark:bg-background-dark pl-10 pr-4 h-12 text-sm focus:border-primary focus:ring-1 focus:ring-primary dark:text-white outline-none transition-all"
-                                        />
-                                    </div>
-                                    {existingClient && (
-                                        <div className="flex items-center gap-2 text-xs text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-900/20 p-2 rounded-lg mt-1 border border-blue-100 dark:border-blue-800">
-                                            <span className="material-symbols-outlined text-sm">verified</span>
-                                            <span>Este número es de <strong>{existingClient.name}</strong></span>
-                                        </div>
-                                    )}
-                                </div>
-                                <div className="flex flex-col gap-2">
-                                    <label className="text-sm font-bold text-text-main-light dark:text-text-main-dark">Correo Electrónico</label>
-                                    <div className="relative">
-                                        <span className="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-text-sec-light">mail</span>
-                                        <input
-                                            required
-                                            type="email"
-                                            value={clientEmail}
-                                            onChange={(e) => setClientEmail(e.target.value)}
-                                            placeholder="cliente@ejemplo.com"
-                                            className="w-full rounded-xl border border-border-light dark:border-border-dark bg-background-light dark:bg-background-dark pl-10 pr-4 h-12 text-sm focus:border-primary focus:ring-1 focus:ring-primary dark:text-white outline-none transition-all"
-                                        />
-                                    </div>
-                                </div>
-                            </div>
-
-                            {/* Cliente (Ahora debajo del teléfono para mostrar lógica de carga) */}
-                            <div className="flex flex-col gap-2">
-                                <label className="text-sm font-bold text-text-main-light dark:text-text-main-dark">Nombre del Cliente</label>
-                                <div className="relative">
-                                    <span className="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-text-sec-light">person</span>
-                                    <input
-                                        required
-                                        type="text"
-                                        value={clientName}
-                                        onChange={(e) => setClientName(e.target.value)}
-                                        placeholder="Nombre completo"
-                                        className="w-full rounded-xl border border-border-light dark:border-border-dark bg-background-light dark:bg-background-dark pl-10 pr-4 h-12 text-sm focus:border-primary focus:ring-1 focus:ring-primary dark:text-white outline-none transition-all"
-                                        readOnly={!!existingClient} // Bloquear si existe
-                                    />
-                                    {existingClient && <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-blue-500 font-bold bg-white dark:bg-card-dark px-1">Autocompletado</span>}
-                                </div>
-                            </div>
-
-                            {/* PRICE DISPLAY BANNER */}
-                            <div className="flex items-center justify-center bg-green-50 dark:bg-green-900/10 border border-green-200 dark:border-green-800 rounded-2xl p-4 my-2">
-                                <div className="text-center">
-                                    <span className="block text-xs font-bold text-green-600 dark:text-green-400 uppercase tracking-wider mb-1">Valor Total del Servicio</span>
-                                    <span className="block text-4xl font-black text-green-600 dark:text-green-400 tracking-tight">{formatPrice(currentTotalPrice)}</span>
-                                </div>
-                            </div>
-
-                            {/* Servicio y Profesional */}
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                <div className="flex flex-col gap-2">
-                                    <label className="text-sm font-bold text-text-main-light dark:text-text-main-dark">Servicio</label>
-                                    <div className="relative">
-                                        <span className="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-text-sec-light">spa</span>
-                                        <select
-                                            value={service}
-                                            onChange={(e) => setService(e.target.value)}
-                                            className="w-full rounded-xl border border-border-light dark:border-border-dark bg-background-light dark:bg-background-dark pl-10 pr-4 h-12 text-sm focus:border-primary focus:ring-1 focus:ring-primary dark:text-white outline-none transition-all appearance-none truncate"
-                                        >
-                                            <optgroup label="Cortes">
-                                                <option>Corte de Cabello</option>
-                                            </optgroup>
-                                            <optgroup label="Servicios de Uñas">
-                                                <option>Esmaltado Tradicional</option>
-                                                <option>Semipermanente Hombre</option>
-                                                <option>Semipermanente Pies</option>
-                                                <option>Semipermanente Manos</option>
-                                                <option>Nivelación Base Ruber</option>
-                                                <option>Builder Gel</option>
-                                                <option>Dipping</option>
-                                                <option>Soft Gel</option>
-                                            </optgroup>
-                                            <optgroup label="Retiros">
-                                                <option>Retiro (Solo Retiro)</option>
-                                            </optgroup>
-                                            <optgroup label="Depilación y Epilación">
-                                                <option>Depilación de Axilas</option>
-                                                <option>Epilación de Cejas</option>
-                                                <option>Epilación de Bozo</option>
-                                                <option>Epilación y Sombreado de Cejas en Henna</option>
-                                            </optgroup>
-                                            <optgroup label="Bienestar">
-                                                <option>Masaje Relajante</option>
-                                            </optgroup>
-                                        </select>
-                                        <span className="material-symbols-outlined absolute right-3 top-1/2 -translate-y-1/2 text-text-sec-light pointer-events-none">expand_more</span>
-                                    </div>
-
-                                    {/* NEW REMOVAL SELECTOR UI */}
-                                    {!service.includes('Retiro') && !service.includes('Corte') && !service.includes('Masaje') && !service.includes('Depilación') && !service.includes('Epilación') && (
-                                        <div className="mt-2 p-3 bg-gray-50 dark:bg-card-dark rounded-xl border border-dashed border-gray-200 dark:border-gray-700">
-                                            <span className="block text-xs font-bold text-text-sec-light dark:text-text-sec-dark uppercase mb-2">¿Incluir Retiro? (+30m)</span>
-                                            <div className="grid grid-cols-2 gap-2">
-                                                <button
-                                                    type="button"
-                                                    onClick={() => setRemovalType('')}
-                                                    className={`px-2 py-2 text-xs rounded-lg font-bold border transition-all ${removalType === ''
-                                                        ? 'bg-gray-200 dark:bg-gray-700 text-gray-800 dark:text-white border-gray-300 dark:border-gray-600'
-                                                        : 'bg-white dark:bg-background-dark text-gray-500 border-transparent hover:border-gray-200'
-                                                        }`}
-                                                >
-                                                    No
-                                                </button>
-                                                <button
-                                                    type="button"
-                                                    onClick={() => setRemovalType('semi')}
-                                                    className={`px-2 py-2 text-xs rounded-lg font-bold border transition-all truncate ${removalType === 'semi'
-                                                        ? 'bg-primary text-white border-primary shadow-sm'
-                                                        : 'bg-white dark:bg-background-dark text-gray-600 dark:text-gray-400 border-gray-200 dark:border-gray-700 hover:border-primary/50'
-                                                        }`}
-                                                >
-                                                    Semi/Press (+$10k)
-                                                </button>
-                                                <button
-                                                    type="button"
-                                                    onClick={() => setRemovalType('acrylic')}
-                                                    className={`px-2 py-2 text-xs rounded-lg font-bold border transition-all truncate ${removalType === 'acrylic'
-                                                        ? 'bg-purple-500 text-white border-purple-500 shadow-sm'
-                                                        : 'bg-white dark:bg-background-dark text-gray-600 dark:text-gray-400 border-gray-200 dark:border-gray-700 hover:border-purple-500/50'
-                                                        }`}
-                                                >
-                                                    Acrílico (+$15k)
-                                                </button>
-                                                <button
-                                                    type="button"
-                                                    onClick={() => setRemovalType('feet')}
-                                                    className={`px-2 py-2 text-xs rounded-lg font-bold border transition-all truncate ${removalType === 'feet'
-                                                        ? 'bg-teal-500 text-white border-teal-500 shadow-sm'
-                                                        : 'bg-white dark:bg-background-dark text-gray-600 dark:text-gray-400 border-gray-200 dark:border-gray-700 hover:border-teal-500/50'
-                                                        }`}
-                                                >
-                                                    Pies (+$8k)
-                                                </button>
-                                            </div>
-                                        </div>
-                                    )}
-                                </div>
-
-                                <div className="flex flex-col gap-2">
-                                    <label className="text-sm font-bold text-text-main-light dark:text-text-main-dark">Profesional</label>
-                                    <div className="relative">
-                                        <span className="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-text-sec-light">badge</span>
-                                        <select
-                                            value={selectedProfessionalId}
-                                            onChange={(e) => setSelectedProfessionalId(Number(e.target.value))}
-                                            required
-                                            disabled={userProfile.role === 'professional'}
-                                            className="w-full rounded-xl border border-border-light dark:border-border-dark bg-background-light dark:bg-background-dark pl-10 pr-4 h-12 text-sm focus:border-primary focus:ring-1 focus:ring-primary dark:text-white outline-none transition-all appearance-none disabled:opacity-50 disabled:cursor-not-allowed"
-                                        >
-                                            <option value="" disabled>Seleccionar...</option>
-                                            {availableProfessionals.map(pro => (
-                                                <option key={pro.id} value={pro.id}>{pro.name}</option>
-                                            ))}
-                                        </select>
-                                        <span className="material-symbols-outlined absolute right-3 top-1/2 -translate-y-1/2 text-text-sec-light pointer-events-none">expand_more</span>
-                                    </div>
-                                </div>
-                            </div>
-
-                            <div className="border-t border-border-light dark:border-border-dark my-1"></div>
-
-                            {/* Date Selection Grid */}
-                            <div className="flex flex-col gap-2">
-                                <label className="text-sm font-bold text-text-main-light dark:text-text-main-dark flex items-center gap-2">
-                                    <span className="material-symbols-outlined text-primary text-[18px]">calendar_month</span>
-                                    Selecciona Fecha Disponible
-                                </label>
-                                <div className="flex overflow-x-auto gap-2 pb-2 scrollbar-hide snap-x">
-                                    {availableDays.length > 0 ? (
-                                        availableDays.map((date, idx) => (
-                                            <button
-                                                type="button"
-                                                key={idx}
-                                                onClick={() => setSelectedDate(date)}
-                                                className={`snap-start shrink-0 flex flex-col items-center justify-center w-16 h-20 rounded-xl border transition-all duration-200 ${isDateSelected(date)
-                                                    ? 'bg-primary border-primary text-white shadow-lg shadow-primary/30 scale-105'
-                                                    : 'bg-white dark:bg-card-dark border-border-light dark:border-border-dark hover:border-primary text-text-sec-light dark:text-text-sec-dark hover:bg-primary/5'
-                                                    }`}
-                                            >
-                                                <span className="text-xs font-medium uppercase">{date.toLocaleDateString('es-ES', { weekday: 'short' })}</span>
-                                                <span className="text-xl font-black mt-1">{date.getDate()}</span>
-                                            </button>
-                                        ))
-                                    ) : (
-                                        <div className="w-full text-center py-4 text-sm text-gray-500 bg-gray-50 dark:bg-gray-800 rounded-xl border border-dashed border-gray-200 dark:border-gray-700">
-                                            No hay fechas disponibles próximas según el horario de apertura.
-                                        </div>
-                                    )}
-                                </div>
-                            </div>
-
-                            {/* Time Selection Grid */}
-                            <div className={`flex flex-col gap-2 transition-opacity duration-300 ${selectedDate ? 'opacity-100' : 'opacity-50 pointer-events-none'}`}>
-                                <div className="flex items-center justify-between">
-                                    <label className="text-sm font-bold text-text-main-light dark:text-text-main-dark flex items-center gap-2">
-                                        <span className="material-symbols-outlined text-primary text-[18px]">schedule</span>
-                                        Selecciona Hora
-                                        {!selectedDate && <span className="text-xs font-normal text-red-500 ml-2">(Elige una fecha primero)</span>}
-                                        {/* Display Estimated Duration */}
-                                        <span className="text-xs font-bold bg-blue-100 text-blue-700 px-2 py-0.5 rounded ml-2">Duración: {formatDuration(currentDurationMinutes)}</span>
-                                    </label>
-
-                                    {/* Leyenda de Disponibilidad */}
-                                    <div className="flex gap-3 text-[10px] text-text-sec-light dark:text-text-sec-dark">
-                                        <div className="flex items-center gap-1"><span className="size-2 rounded-full bg-white border border-gray-300"></span>Libre</div>
-                                        <div className="flex items-center gap-1"><span className="size-2 rounded-full bg-primary"></span>Elegido</div>
-                                        <div className="flex items-center gap-1"><span className="size-2 rounded-full bg-gray-100 dark:bg-gray-700 border border-gray-200"></span>Ocupado</div>
-                                    </div>
-                                </div>
-
-                                <div className="grid grid-cols-4 gap-2">
-                                    {timeSlots.length > 0 ? (
-                                        timeSlots.map((time) => {
-                                            const isOccupied = isSlotOccupied(time);
-                                            return (
-                                                <button
-                                                    type="button"
-                                                    key={time}
-                                                    disabled={isOccupied}
-                                                    onClick={() => {
-                                                        if (!isOccupied) setSelectedTime(time);
-                                                    }}
-                                                    className={`py-2 rounded-lg text-sm font-bold border transition-all relative overflow-hidden ${selectedTime === time
-                                                        ? 'bg-primary border-primary text-white shadow-md z-10'
-                                                        : isOccupied
-                                                            ? 'bg-gray-100 dark:bg-gray-800 border-gray-200 dark:border-gray-700 text-gray-400 dark:text-gray-600 cursor-not-allowed'
-                                                            : 'bg-white dark:bg-card-dark border-border-light dark:border-border-dark text-text-main-light dark:text-text-main-dark hover:bg-primary/10 hover:border-primary'
-                                                        }`}
-                                                >
-                                                    {time}
-                                                    {isOccupied && <span className="absolute inset-0 flex items-center justify-center bg-gray-200/50 dark:bg-black/50"><span className="material-symbols-outlined text-xs">block</span></span>}
-                                                </button>
-                                            );
-                                        })
-                                    ) : (
-                                        selectedDate && (
-                                            <div className="col-span-4 text-center py-4 text-sm text-orange-500 bg-orange-50 dark:bg-orange-900/20 rounded-xl border border-orange-100 dark:border-orange-900/30">
-                                                No hay horarios disponibles para este día con la duración requerida ({formatDuration(currentDurationMinutes)}).
-                                            </div>
-                                        )
-                                    )}
-                                </div>
-                            </div>
-
-                            <div className="flex gap-3 mt-4 pt-4 border-t border-border-light dark:border-border-dark">
-                                <button
-                                    type="button"
-                                    onClick={() => setIsModalOpen(false)}
-                                    disabled={isSubmitting}
-                                    className="flex-1 py-3 rounded-xl font-bold text-text-sec-light dark:text-text-sec-dark hover:bg-background-light dark:hover:bg-background-dark transition-colors disabled:opacity-50"
-                                >
-                                    Cancelar
-                                </button>
-                                <button
-                                    type="submit"
-                                    disabled={!selectedDate || !selectedTime || !clientName || !clientEmail || clientPhone.length < 10 || !selectedProfessionalId || isSubmitting}
-                                    className="flex-1 py-3 rounded-xl bg-primary text-white font-bold hover:bg-primary/90 transition-colors shadow-lg shadow-primary/20 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
-                                >
-                                    {isSubmitting ? (
-                                        <>
-                                            <span className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></span>
-                                            <span>Procesando...</span>
-                                        </>
-                                    ) : (
-                                        <>
-                                            <span className="material-symbols-outlined text-[20px]">send</span>
-                                            <span>Agendar y Enviar</span>
-                                        </>
-                                    )}
-                                </button>
-                            </div>
-                        </form>
+                        </div>
                     </div>
-                </div>
-            )}
-        </div>
-    );
-};
+                )
+            }
 
-export default Agenda;
+
+            export default Agenda;
