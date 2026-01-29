@@ -502,6 +502,29 @@ const ProfessionalDashboard: React.FC = () => {
             .slice(0, 10); // Mostrar las últimas 10
     }, [appointments]);
 
+    // Filtrar citas ACTIVAS (Pendientes/Confirmadas y FUTURAS) para el contador de Total Citas
+    const activeAppointmentsCount = useMemo(() => {
+        const now = new Date();
+        return appointments.filter(appt => {
+            if (appt.status === 'cancelled') return false;
+            if (!appt.date) return false;
+
+            const [hours, minutes] = appt.time.split(':').map(Number);
+            const startTime = new Date(appt.date);
+            startTime.setHours(hours, minutes, 0, 0);
+
+            let durationMinutes = 60;
+            const hMatch = appt.duration.match(/(\d+)h/);
+            const mMatch = appt.duration.match(/(\d+)m/);
+            if (hMatch) durationMinutes = parseInt(hMatch[1]) * 60;
+            if (mMatch) durationMinutes += parseInt(mMatch[1]);
+            else if (!hMatch && !mMatch) durationMinutes = 60;
+
+            const endTime = new Date(startTime.getTime() + durationMinutes * 60000);
+            return now < endTime; // Solo las que no han terminado
+        }).length;
+    }, [appointments]);
+
     return (
         <div className="p-6 md:p-10 max-w-7xl mx-auto w-full flex flex-col gap-8 pb-20" onClick={() => setOpenMenuId(null)}>
             {/* Page Heading */}
@@ -522,7 +545,7 @@ const ProfessionalDashboard: React.FC = () => {
             {/* Metrics */}
             <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
                 <div
-                    onClick={() => navigate('/agenda')}
+                    onClick={() => document.getElementById('upcoming-list')?.scrollIntoView({ behavior: 'smooth' })}
                     className="bg-card-light dark:bg-card-dark p-6 rounded-xl border border-border-light dark:border-border-dark flex flex-col gap-4 shadow-sm hover:shadow-md hover:border-primary/30 cursor-pointer transition-all group"
                 >
                     <div className="flex items-center justify-between">
@@ -533,7 +556,7 @@ const ProfessionalDashboard: React.FC = () => {
                     </div>
                     <div>
                         <p className="text-text-sec-light dark:text-text-sec-dark text-sm font-medium mb-1 group-hover:text-primary transition-colors">Total Citas</p>
-                        <p className="text-3xl font-bold text-text-main-light dark:text-text-main-dark tracking-tight">{appointments.length}</p>
+                        <p className="text-3xl font-bold text-text-main-light dark:text-text-main-dark tracking-tight">{activeAppointmentsCount}</p>
                     </div>
                 </div>
                 <div
@@ -576,7 +599,7 @@ const ProfessionalDashboard: React.FC = () => {
 
             {/* Upcoming Appointments List */}
             <div className="flex flex-col gap-5">
-                <div className="flex items-center justify-between px-1">
+                <div className="flex items-center justify-between px-1" id="upcoming-list">
                     <h3 className="text-xl font-bold text-text-main-light dark:text-text-main-dark tracking-tight">Próximas Citas</h3>
                     <Link to="/agenda" className="text-sm font-bold text-primary hover:text-primary/80 transition-colors flex items-center gap-1">
                         Ver calendario completo

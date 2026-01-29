@@ -90,12 +90,10 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
             `);
 
             let currentClientId: number | undefined;
-            let currentProId: number | undefined;
 
             if (role === 'professional') {
-                const myPro = mappedPros.find(p => p.email === session.user.email);
+                const myPro = mappedPros.find(p => p.email.toLowerCase() === session.user.email?.toLowerCase());
                 if (myPro) {
-                    currentProId = myPro.id;
                     apptsQuery = apptsQuery.eq('professional_id', myPro.id);
                 } else {
                     apptsQuery = apptsQuery.eq('id', -1);
@@ -108,7 +106,7 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
             const { data: apptsData } = await apptsQuery;
 
             if (apptsData) {
-                setAppointments(apptsData.map((a: any) => {
+                const mappedAppts = apptsData.map((a: any) => {
                     let isOwn = true;
                     if (role === 'client') {
                         isOwn = currentClientId !== undefined && a.client_id === currentClientId;
@@ -145,46 +143,50 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
                         professionalName: a.professionals?.name,
                         price: a.price ? `$${a.price}` : undefined
                     };
-                }));
-            }
+                });
+                setAppointments(mappedAppts);
 
-            // 3. Fetch Clients (Admin or Professional)
-            if (role === 'admin') {
-                const { data: clientsData } = await supabase.from('clients').select('*').order('created_at', { ascending: false });
-                if (clientsData) {
-                    setClients(clientsData.map((c: any) => ({
-                        id: c.id,
-                        name: c.name,
-                        email: c.email,
-                        phone: c.phone,
-                        avatar: c.avatar || c.avatar_url || `https://ui-avatars.com/api/?name=${encodeURIComponent(c.name)}&background=random`,
-                        lastVisit: c.last_visit ? new Date(c.last_visit).toLocaleDateString() : 'Nuevo',
-                        isNew: false,
-                        role: c.role,
-                        profileId: c.profile_id
-                    })));
-                }
-            } else if (role === 'professional' && currentProId) {
-                // Fetch clients who have appointments with this professional
-                const { data: proClients } = await supabase
-                    .from('clients')
-                    .select('*, appointments!inner(professional_id)')
-                    .eq('appointments.professional_id', currentProId);
-
-                if (proClients) {
-                    // Unique clients
-                    const uniqueClients = Array.from(new Map(proClients.map((c: any) => [c.id, c])).values());
-                    setClients(uniqueClients.map((c: any) => ({
-                        id: c.id,
-                        name: c.name,
-                        email: c.email,
-                        phone: c.phone,
-                        avatar: c.avatar || c.avatar_url || `https://ui-avatars.com/api/?name=${encodeURIComponent(c.name)}&background=random`,
-                        lastVisit: c.last_visit ? new Date(c.last_visit).toLocaleDateString() : 'Nuevo',
-                        isNew: false,
-                        role: c.role,
-                        profileId: c.profile_id
-                    })));
+                // 3. Fetch Clients (Admin or Professional)
+                if (role === 'admin') {
+                    const { data: clientsData } = await supabase.from('clients').select('*').order('created_at', { ascending: false });
+                    if (clientsData) {
+                        setClients(clientsData.map((c: any) => ({
+                            id: c.id,
+                            name: c.name,
+                            email: c.email,
+                            phone: c.phone,
+                            avatar: c.avatar || c.avatar_url || `https://ui-avatars.com/api/?name=${encodeURIComponent(c.name)}&background=random`,
+                            lastVisit: c.last_visit ? new Date(c.last_visit).toLocaleDateString() : 'Nuevo',
+                            isNew: false,
+                            role: c.role,
+                            profileId: c.profile_id
+                        })));
+                    }
+                } else if (role === 'professional') {
+                    // Extract unique client IDs from appointments we just loaded
+                    const clientIds = Array.from(new Set(apptsData.map((a: any) => a.client_id).filter(id => id !== null)));
+                    if (clientIds.length > 0) {
+                        const { data: clientsData } = await supabase.from('clients').select('*').in('id', clientIds);
+                        if (clientsData) {
+                            setClients(clientsData.map((c: any) => ({
+                                id: c.id,
+                                name: c.name,
+                                email: c.email,
+                                phone: c.phone,
+                                avatar: c.avatar || c.avatar_url || `https://ui-avatars.com/api/?name=${encodeURIComponent(c.name)}&background=random`,
+                                lastVisit: c.last_visit ? new Date(c.last_visit).toLocaleDateString() : 'Nuevo',
+                                isNew: false,
+                                role: c.role,
+                                profileId: c.profile_id
+                            })));
+                        } else {
+                            setClients([]);
+                        }
+                    } else {
+                        setClients([]);
+                    }
+                } else {
+                    setClients([]);
                 }
             } else {
                 setClients([]);

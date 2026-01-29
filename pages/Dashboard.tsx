@@ -545,7 +545,7 @@ const Dashboard: React.FC = () => {
             {/* Metrics */}
             <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
                 <div
-                    onClick={() => navigate('/agenda')}
+                    onClick={() => document.getElementById('upcoming-list')?.scrollIntoView({ behavior: 'smooth' })}
                     className="bg-card-light dark:bg-card-dark p-6 rounded-xl border border-border-light dark:border-border-dark flex flex-col gap-4 shadow-sm hover:shadow-md hover:border-primary/30 cursor-pointer transition-all group"
                 >
                     <div className="flex items-center justify-between">
@@ -599,7 +599,7 @@ const Dashboard: React.FC = () => {
 
             {/* Upcoming Appointments List */}
             <div className="flex flex-col gap-5">
-                <div className="flex items-center justify-between px-1">
+                <div className="flex items-center justify-between px-1" id="upcoming-list">
                     <h3 className="text-xl font-bold text-text-main-light dark:text-text-main-dark tracking-tight">Próximas Citas</h3>
                     <Link to="/agenda" className="text-sm font-bold text-primary hover:text-primary/80 transition-colors flex items-center gap-1">
                         Ver calendario completo
