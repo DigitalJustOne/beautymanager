@@ -3,6 +3,8 @@ import { Link, useNavigate } from 'react-router-dom';
 import { useData } from '../context/DataContext';
 import { Appointment, Client } from '../types';
 import { generateGoogleCalendarUrl } from '../services/calendarService';
+import { formatPrice, formatDuration } from '../utils/format';
+import AppointmentDetailsModal from '../components/AppointmentDetailsModal';
 
 const ProfessionalDashboard: React.FC = () => {
     const navigate = useNavigate();
@@ -20,7 +22,7 @@ const ProfessionalDashboard: React.FC = () => {
     const [clientName, setClientName] = useState('');
     const [clientPhone, setClientPhone] = useState('');
     const [clientEmail, setClientEmail] = useState('');
-    const [service, setService] = useState('Semipermanente Manos');
+    const [service, setService] = useState('');
     const [selectedProfessionalId, setSelectedProfessionalId] = useState<number | ''>('');
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [selectedDate, setSelectedDate] = useState<Date | null>(null);
@@ -30,6 +32,10 @@ const ProfessionalDashboard: React.FC = () => {
     // NUEVO: Estado para el tipo de retiro (string vacío = no retiro)
     const [removalType, setRemovalType] = useState<'' | 'semi' | 'acrylic' | 'feet'>('');
 
+    // Estados para el link de éxito y detalles de la cita agendada
+    const [successLink, setSuccessLink] = useState<string | null>(null);
+    const [bookedApptDetails, setBookedApptDetails] = useState<Appointment | null>(null);
+
     // Resetear la hora seleccionada cuando cambia la fecha, servicio o retiro
     useEffect(() => {
         setSelectedTime(null);
@@ -38,6 +44,7 @@ const ProfessionalDashboard: React.FC = () => {
 
     // Filtrar profesionales
     const availableProfessionals = useMemo(() => {
+        if (!service) return professionals;
         return professionals.filter(p => p.specialties.includes(service));
     }, [professionals, service]);
 
@@ -68,7 +75,7 @@ const ProfessionalDashboard: React.FC = () => {
         return days;
     }, [userProfile.schedule]);
 
-    // Helper Precios (AUMENTADOS EN 10K SEGÚN SOLICITUD)
+    // Helper de Precios Dinámicos
     const getServiceBasePrice = (serviceName: string): number => {
         const found = services.find(s => s.name === serviceName);
         return found ? found.price : 0;
@@ -77,20 +84,13 @@ const ProfessionalDashboard: React.FC = () => {
     // Calcular precio TOTAL (Base + Retiro específico)
     const currentTotalPrice = useMemo(() => {
         let price = getServiceBasePrice(service);
-
-        // Lógica de precios de retiro específicos
         if (removalType === 'semi') price += 10000;
         if (removalType === 'acrylic') price += 15000;
         if (removalType === 'feet') price += 8000;
-
         return price;
-    }, [service, removalType]);
+    }, [service, removalType, services]);
 
-    const formatPrice = (price: number) => {
-        return `$${price.toLocaleString('es-CO')}`;
-    };
-
-    // Helper Duración
+    // Helper Duración Dinámica
     const getServiceBaseMinutes = (serviceName: string) => {
         const found = services.find(s => s.name === serviceName);
         return found ? found.duration : 60;
@@ -98,20 +98,12 @@ const ProfessionalDashboard: React.FC = () => {
 
     const currentDurationMinutes = useMemo(() => {
         let minutes = getServiceBaseMinutes(service);
-        // Si hay algún tipo de retiro seleccionado (y no es el servicio principal), sumar 30 min
         if (removalType && !service.includes('Retiro') && !service.includes('Corte') && !service.includes('Masaje') && !service.includes('Depilación') && !service.includes('Epilación')) {
             minutes += 30;
         }
         return minutes;
-    }, [service, removalType]);
+    }, [service, removalType, services]);
 
-    const formatDuration = (minutes: number) => {
-        const h = Math.floor(minutes / 60);
-        const m = minutes % 60;
-        if (h > 0 && m > 0) return `${h}h ${m}m`;
-        if (h > 0) return `${h}h`;
-        return `${m}m`;
-    };
 
     // Slots de tiempo
     const timeSlots = useMemo(() => {
@@ -249,17 +241,26 @@ const ProfessionalDashboard: React.FC = () => {
         setOpenMenuId(null);
     };
 
-    // Crear Cita
+    const resetModal = () => {
+        setIsModalOpen(false);
+        setClientName('');
+        setClientPhone('');
+        setClientEmail('');
+        setService('');
+        setRemovalType('');
+        setSelectedProfessionalId('');
+        setSelectedDate(null);
+        setSelectedTime(null);
+        setFormError(null);
+        setSuccessLink(null);
+        setBookedApptDetails(null);
+    };
+
     const handleCreateAppointment = async (e: React.FormEvent) => {
         e.preventDefault();
         setFormError(null);
 
-        if (!selectedDate || !selectedTime || !clientName || !clientEmail || !clientPhone || !selectedProfessionalId || isSubmitting) return;
-
-        if (clientPhone.length !== 10) {
-            setFormError("Por favor ingresa un número de celular válido de 10 dígitos.");
-            return;
-        }
+        if (!selectedDate || !selectedTime || !service || !clientName || !clientEmail || clientPhone.length !== 10 || !selectedProfessionalId || isSubmitting) return;
 
         if (isSlotOccupied(selectedTime)) {
             const proName = professionals.find(p => p.id === Number(selectedProfessionalId))?.name;
@@ -286,7 +287,7 @@ const ProfessionalDashboard: React.FC = () => {
                 }
             }
 
-            const avatarUrl = existingClient ? existingClient.avatar : `https://ui-avatars.com/api/?name=${encodeURIComponent(clientName)}&background=random`;
+            const avatarUrl = existingClient?.avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(clientName)}&background=random`;
             const selectedPro = professionals.find(p => p.id === Number(selectedProfessionalId));
 
             let finalClientName = clientName;
@@ -310,7 +311,6 @@ const ProfessionalDashboard: React.FC = () => {
             const finalDurationString = formatDuration(currentDurationMinutes);
             const finalPriceString = formatPrice(currentTotalPrice);
 
-            // Construir string de servicio con el retiro específico
             let serviceString = service;
             if (removalType === 'semi') serviceString += ' + Retiro Semi';
             if (removalType === 'acrylic') serviceString += ' + Retiro Acrílico';
@@ -334,25 +334,11 @@ const ProfessionalDashboard: React.FC = () => {
 
             await addAppointment(newAppt);
 
-            // Preguntar si desea sincronizar con Google Calendar
-            if (window.confirm(`¡Solicitud registrada!\nTotal a pagar: ${finalPriceString}\n\n¿Deseas agregar este evento a Google Calendar ahora?`)) {
-                const calendarUrl = generateGoogleCalendarUrl(newAppt);
-                if (calendarUrl) {
-                    window.open(calendarUrl, '_blank');
-                }
-            } else {
-                alert(`Cita registrada correctamente.`);
-            }
+            // Generar Link y Mostrar Éxito (SIN ALERTAS HORRIBLES)
+            const calendarUrl = generateGoogleCalendarUrl(newAppt);
+            setSuccessLink(calendarUrl || null);
+            setBookedApptDetails(newAppt);
 
-            setIsModalOpen(false);
-            setClientName('');
-            setClientPhone('');
-            setClientEmail('');
-            setService('Semipermanente Manos');
-            setRemovalType(''); // Reset retiro
-            setSelectedProfessionalId('');
-            setSelectedDate(null);
-            setSelectedTime(null);
         } catch (error) {
             console.error("Error creating appointment:", error);
             setFormError("Ocurrió un error al crear la cita.");
@@ -600,7 +586,20 @@ const ProfessionalDashboard: React.FC = () => {
                                     </div>
                                     <div className="flex items-center gap-4 flex-1">
                                         <div className="relative shrink-0">
-                                            <div className="bg-center bg-no-repeat bg-cover rounded-full h-12 w-12 bg-gray-200 ring-2 ring-white dark:ring-card-dark" style={{ backgroundImage: `url("${appt.avatar}")` }}></div>
+                                            {appt.avatar ? (
+                                                <img
+                                                    src={appt.avatar}
+                                                    className="rounded-full h-12 w-12 object-cover ring-2 ring-white dark:ring-card-dark"
+                                                    alt={appt.client}
+                                                    onError={(e) => {
+                                                        (e.target as HTMLImageElement).src = `https://ui-avatars.com/api/?name=${encodeURIComponent(appt.client)}&background=random`;
+                                                    }}
+                                                />
+                                            ) : (
+                                                <div className="h-12 w-12 rounded-full bg-primary/10 flex items-center justify-center text-primary ring-2 ring-white dark:ring-card-dark">
+                                                    <span className="material-symbols-outlined">person</span>
+                                                </div>
+                                            )}
                                             <div className="absolute -bottom-0.5 -right-0.5 bg-card-light dark:bg-card-dark rounded-full p-0.5">
                                                 <div className={`h-2.5 w-2.5 rounded-full ${status.color.includes('green') ? 'bg-green-500' : status.color.includes('orange') ? 'bg-orange-500' : status.color.includes('blue') ? 'bg-blue-500' : 'bg-red-500'}`}></div>
                                             </div>
@@ -722,7 +721,20 @@ const ProfessionalDashboard: React.FC = () => {
                                     </div>
                                     <div className="flex items-center gap-4 flex-1 opacity-80 group-hover:opacity-100 transition-opacity">
                                         <div className="relative shrink-0 grayscale">
-                                            <div className="bg-center bg-no-repeat bg-cover rounded-full h-10 w-10 bg-gray-200" style={{ backgroundImage: `url("${appt.avatar}")` }}></div>
+                                            {appt.avatar ? (
+                                                <img
+                                                    src={appt.avatar}
+                                                    className="rounded-full h-10 w-10 object-cover"
+                                                    alt={appt.client}
+                                                    onError={(e) => {
+                                                        (e.target as HTMLImageElement).src = `https://ui-avatars.com/api/?name=${encodeURIComponent(appt.client)}&background=random`;
+                                                    }}
+                                                />
+                                            ) : (
+                                                <div className="h-10 w-10 rounded-full bg-slate-200 flex items-center justify-center text-slate-400">
+                                                    <span className="material-symbols-outlined text-xl">person</span>
+                                                </div>
+                                            )}
                                         </div>
                                         <div className="flex flex-col">
                                             <span className={`text-base font-bold text-gray-700 dark:text-gray-300 ${isCancelled ? 'line-through decoration-red-400' : ''}`}>{appt.client}</span>
@@ -758,89 +770,25 @@ const ProfessionalDashboard: React.FC = () => {
                 </div>
             </div>
 
-            {/* --- DETALLE CITA DASHBOARD (NUEVO MODAL) --- */}
-            {selectedAppointment && (
-                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4 animate-in fade-in duration-200" onClick={() => setSelectedAppointment(null)}>
-                    <div className="bg-white dark:bg-card-dark rounded-2xl shadow-2xl w-full max-w-sm overflow-hidden border border-border-light dark:border-border-dark animate-in zoom-in-95 duration-200" onClick={(e) => e.stopPropagation()}>
-                        <div className="h-24 bg-primary relative">
-                            <button onClick={() => setSelectedAppointment(null)} className="absolute top-4 right-4 bg-black/20 hover:bg-black/40 text-white rounded-full p-1 transition-colors"><span className="material-symbols-outlined text-lg">close</span></button>
-                        </div>
-                        <div className="px-6 pb-6 relative">
-                            <div className="size-20 rounded-full border-4 border-white dark:border-card-dark bg-cover bg-center -mt-10 mb-4 bg-gray-200" style={{ backgroundImage: `url("${selectedAppointment.avatar}")` }}></div>
-                            <h3 className="text-xl font-bold text-slate-900 dark:text-white text-center">{selectedAppointment.client}</h3>
-                            <p className="text-slate-500 dark:text-slate-400 text-sm mb-6 text-center">{selectedAppointment.service}</p>
-
-                            <div className="bg-slate-50 dark:bg-slate-800/50 rounded-xl p-4 border border-slate-100 dark:border-slate-800 mb-6">
-                                <div className="flex justify-between items-center border-b border-slate-200 dark:border-slate-700 pb-3 mb-3">
-                                    <span className="text-xs text-slate-500 uppercase font-bold">Fecha</span>
-                                    <span className="text-sm font-medium dark:text-gray-200">{selectedAppointment.date?.toLocaleDateString()}</span>
-                                </div>
-                                <div className="flex justify-between items-center border-b border-slate-200 dark:border-slate-700 pb-3 mb-3">
-                                    <span className="text-xs text-slate-500 uppercase font-bold">Horario</span>
-                                    <span className="text-sm font-medium dark:text-gray-200">{selectedAppointment.time}</span>
-                                </div>
-                                <div className="flex justify-between items-center border-b border-slate-200 dark:border-slate-700 pb-3 mb-3">
-                                    <span className="text-xs text-slate-500 uppercase font-bold">Profesional</span>
-                                    <span className="text-sm font-medium dark:text-gray-200">{selectedAppointment.professionalName || 'No asignado'}</span>
-                                </div>
-                                {/* PRECIO ROW */}
-                                <div className="flex justify-between items-center border-b border-slate-200 dark:border-slate-700 pb-3 mb-3">
-                                    <span className="text-xs text-slate-500 uppercase font-bold">Precio Total</span>
-                                    <span className="text-lg font-black text-green-600 dark:text-green-400">{selectedAppointment.price || 'N/A'}</span>
-                                </div>
-                                <div className="flex justify-between items-center">
-                                    <span className="text-xs text-slate-500 uppercase font-bold">Estado</span>
-                                    {(() => {
-                                        const status = getAppointmentStatus(selectedAppointment);
-                                        return (
-                                            <span className={`text-[10px] px-2 py-1 rounded-full font-bold ${status.color}`}>
-                                                {status.label}
-                                            </span>
-                                        );
-                                    })()}
-                                </div>
-                            </div>
-
-                            {/* ACTION BUTTONS (Unified Design) */}
-                            <div className="flex gap-3 mb-4">
-                                {getAppointmentStatus(selectedAppointment).label === 'Pendiente' && (
-                                    <button
-                                        onClick={() => { updateAppointmentStatus(selectedAppointment.id, 'confirmed'); setSelectedAppointment(null); }}
-                                        className="flex-1 py-2.5 bg-green-100 text-green-700 hover:bg-green-200 rounded-xl font-bold text-sm transition-colors flex items-center justify-center gap-1"
-                                    >
-                                        <span className="material-symbols-outlined text-[18px]">check</span>
-                                        Confirmar
-                                    </button>
-                                )}
-                                {(getAppointmentStatus(selectedAppointment).label === 'Pendiente' || getAppointmentStatus(selectedAppointment).label === 'Confirmado') && (
-                                    <button
-                                        onClick={() => {
-                                            if (window.confirm('¿Estás seguro de cancelar esta cita?')) {
-                                                deleteAppointment(selectedAppointment.id);
-                                                setSelectedAppointment(null);
-                                            }
-                                        }}
-                                        className="flex-1 py-2.5 bg-red-100 text-red-700 hover:bg-red-200 rounded-xl font-bold text-sm transition-colors flex items-center justify-center gap-1"
-                                    >
-                                        <span className="material-symbols-outlined text-[18px]">cancel</span>
-                                        Cancelar
-                                    </button>
-                                )}
-                            </div>
-
-                            {(() => {
-                                const client = getClientInfo(selectedAppointment.client);
-                                return client && (
-                                    <div className="flex gap-3">
-                                        <a href={`tel:${client.phone}`} className="flex-1 flex items-center justify-center gap-2 bg-green-500 hover:bg-green-600 text-white py-2.5 rounded-xl font-bold text-sm shadow-lg shadow-green-500/20"><span className="material-symbols-outlined text-[18px]">call</span>Llamar</a>
-                                        <a href={`mailto:${client.email}`} className="flex-1 flex items-center justify-center gap-2 bg-blue-500 hover:bg-blue-600 text-white py-2.5 rounded-xl font-bold text-sm shadow-lg shadow-blue-500/20"><span className="material-symbols-outlined text-[18px]">mail</span>Email</a>
-                                    </div>
-                                );
-                            })()}
-                        </div>
-                    </div>
-                </div>
-            )}
+            {/* --- MODAL DETALLES UNIFICADO --- */}
+            <AppointmentDetailsModal
+                isOpen={!!selectedAppointment}
+                onClose={() => setSelectedAppointment(null)}
+                appointment={selectedAppointment}
+                userRole="professional"
+                onConfirm={getAppointmentStatus(selectedAppointment || {}).label === 'Pendiente' ? () => {
+                    if (selectedAppointment) {
+                        updateAppointmentStatus(selectedAppointment.id, 'confirmed');
+                        setSelectedAppointment(null);
+                    }
+                } : undefined}
+                onCancel={(getAppointmentStatus(selectedAppointment || {}).label === 'Pendiente' || getAppointmentStatus(selectedAppointment || {}).label === 'Confirmado') ? () => {
+                    if (selectedAppointment && window.confirm('¿Estás seguro de cancelar esta cita?')) {
+                        deleteAppointment(selectedAppointment.id);
+                        setSelectedAppointment(null);
+                    }
+                } : undefined}
+            />
 
             {/* --- MODAL DE PENDIENTES --- */}
             {isPendingModalOpen && (
@@ -917,313 +865,350 @@ const ProfessionalDashboard: React.FC = () => {
                 </div>
             )}
 
-            {/* New Appointment Modal */}
             {isModalOpen && (
-                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4 animate-in fade-in duration-200" onClick={(e) => e.stopPropagation()}>
-                    <div className="bg-card-light dark:bg-card-dark rounded-2xl shadow-2xl w-full max-w-xl overflow-hidden border border-border-light dark:border-border-dark animate-in zoom-in-95 duration-200 max-h-[90vh] flex flex-col">
-                        <div className="p-4 border-b border-border-light dark:border-border-dark flex justify-between items-center bg-primary text-white shrink-0">
-                            <div className="flex items-center gap-2">
-                                <span className="material-symbols-outlined">add_circle</span>
-                                <h3 className="font-bold text-lg">Nueva Cita</h3>
+                <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/60 backdrop-blur-md p-4 animate-in fade-in duration-300">
+                    <div className="bg-white dark:bg-card-dark rounded-[24px] shadow-2xl w-full max-w-xl overflow-hidden border border-white/20 dark:border-border-dark animate-in zoom-in-95 duration-300 max-h-[90vh] flex flex-col">
+
+                        {/* Header Unificado */}
+                        <div className="p-5 border-b border-border-light dark:border-border-dark flex justify-between items-center bg-primary text-white shrink-0 relative overflow-hidden">
+                            <div className="absolute inset-0 bg-gradient-to-r from-white/10 to-transparent"></div>
+                            <div className="flex items-center gap-3 relative z-10">
+                                <span className="material-symbols-outlined text-2xl">add_circle</span>
+                                <div className="flex flex-col">
+                                    <h3 className="font-bold text-xl tracking-tight leading-none">Nueva Cita</h3>
+                                    <span className="text-[10px] opacity-70 uppercase tracking-widest mt-1">Gestión de Agenda</span>
+                                </div>
                             </div>
                             <button
-                                onClick={() => setIsModalOpen(false)}
-                                className="hover:bg-white/20 rounded-full p-1 transition-colors"
+                                onClick={resetModal}
+                                className="hover:bg-white/20 rounded-full p-2 transition-all relative z-10 active:scale-90"
                             >
-                                <span className="material-symbols-outlined">close</span>
+                                <span className="material-symbols-outlined text-2xl">close</span>
                             </button>
                         </div>
 
-                        <form onSubmit={handleCreateAppointment} className="flex-1 overflow-y-auto p-6 flex flex-col gap-5 scrollbar-hide">
-                            <div className="bg-blue-50 dark:bg-blue-900/20 p-4 rounded-xl flex items-start gap-3 border border-blue-100 dark:border-blue-900/30">
-                                <span className="material-symbols-outlined text-blue-500 mt-0.5">info</span>
-                                <p className="text-sm text-blue-800 dark:text-blue-200">
-                                    Se registrará automáticamente el cliente si es nuevo y se enviará la invitación de calendario.
-                                </p>
-                            </div>
-
-                            {/* ERROR NOTIFICATION BANNER */}
-                            {formError && (
-                                <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 text-red-600 dark:text-red-300 p-4 rounded-xl flex gap-3 animate-in fade-in slide-in-from-top-1">
-                                    <span className="material-symbols-outlined shrink-0">error</span>
-                                    <div className="flex flex-col">
-                                        <span className="font-bold text-sm">No se pudo agendar la cita</span>
-                                        <span className="text-xs">{formError}</span>
+                        <div className="flex-1 overflow-y-auto scrollbar-hide">
+                            {bookedApptDetails ? (
+                                // SUCCESS SCREEN (Identical to Agenda.tsx)
+                                <div className="p-8 flex flex-col items-center animate-in zoom-in duration-500">
+                                    <div className="w-20 h-20 bg-green-100 dark:bg-green-900/30 rounded-full flex items-center justify-center mb-6 border-4 border-white dark:border-gray-800 shadow-xl overflow-hidden relative group">
+                                        <div className="absolute inset-0 bg-green-500 scale-0 group-hover:scale-100 transition-transform duration-500 rounded-full opacity-10"></div>
+                                        <span className="material-symbols-outlined text-green-500 text-5xl animate-in fade-in slide-in-from-bottom-2">check_circle</span>
                                     </div>
-                                </div>
-                            )}
+                                    <h3 className="text-3xl font-black text-slate-900 dark:text-white mb-2 text-center tracking-tight">¡Cita Registrada!</h3>
+                                    <p className="text-slate-500 dark:text-slate-400 text-center mb-8 text-lg">Tu servicio ha sido agendado exitosamente.</p>
 
-                            {/* Contacto: Teléfono y Email */}
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                <div className="flex flex-col gap-2">
-                                    <label className="text-sm font-bold text-text-main-light dark:text-text-main-dark">Celular </label>
-                                    <div className="relative">
-                                        <span className="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-text-sec-light">smartphone</span>
-                                        <input
-                                            required
-                                            type="tel"
-                                            pattern="[0-9]{10}"
-                                            maxLength={10}
-                                            value={clientPhone}
-                                            onChange={handlePhoneChange}
-                                            placeholder="Ej: 5512345678"
-                                            className="w-full rounded-xl border border-border-light dark:border-border-dark bg-background-light dark:bg-background-dark pl-10 pr-4 h-12 text-sm focus:border-primary focus:ring-1 focus:ring-primary dark:text-white outline-none transition-all"
-                                        />
-                                    </div>
-                                    {existingClient && (
-                                        <div className="flex items-center gap-2 text-xs text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-900/20 p-2 rounded-lg mt-1 border border-blue-100 dark:border-blue-800">
-                                            <span className="material-symbols-outlined text-sm">verified</span>
-                                            <span>Este número es de <strong>{existingClient.name}</strong></span>
-                                        </div>
-                                    )}
-                                </div>
-                                <div className="flex flex-col gap-2">
-                                    <label className="text-sm font-bold text-text-main-light dark:text-text-main-dark">Correo Electrónico</label>
-                                    <div className="relative">
-                                        <span className="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-text-sec-light">mail</span>
-                                        <input
-                                            required
-                                            type="email"
-                                            value={clientEmail}
-                                            onChange={(e) => setClientEmail(e.target.value)}
-                                            placeholder="cliente@ejemplo.com"
-                                            className="w-full rounded-xl border border-border-light dark:border-border-dark bg-background-light dark:bg-background-dark pl-10 pr-4 h-12 text-sm focus:border-primary focus:ring-1 focus:ring-primary dark:text-white outline-none transition-all"
-                                        />
-                                    </div>
-                                </div>
-                            </div>
-
-                            {/* Cliente */}
-                            <div className="flex flex-col gap-2">
-                                <label className="text-sm font-bold text-text-main-light dark:text-text-main-dark">Nombre del Cliente</label>
-                                <div className="relative">
-                                    <span className="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-text-sec-light">person</span>
-                                    <input
-                                        required
-                                        type="text"
-                                        value={clientName}
-                                        onChange={(e) => setClientName(e.target.value)}
-                                        placeholder="Nombre completo"
-                                        className="w-full rounded-xl border border-border-light dark:border-border-dark bg-background-light dark:bg-background-dark pl-10 pr-4 h-12 text-sm focus:border-primary focus:ring-1 focus:ring-primary dark:text-white outline-none transition-all"
-                                        readOnly={!!existingClient}
-                                    />
-                                    {existingClient && <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-blue-500 font-bold bg-white dark:bg-card-dark px-1">Autocompletado</span>}
-                                </div>
-                            </div>
-
-                            <div className="flex items-center justify-center bg-green-50 dark:bg-green-900/10 border border-green-200 dark:border-green-800 rounded-2xl p-6 my-2 relative overflow-hidden group">
-                                <div className="absolute inset-0 bg-green-500/5 translate-y-full group-hover:translate-y-0 transition-transform duration-500"></div>
-                                <div className="text-center relative z-10">
-                                    <span className="block text-xs font-bold text-green-600 dark:text-green-400 uppercase tracking-wider mb-1">Valor Total del Servicio</span>
-                                    <span className="block text-4xl font-black text-green-600 dark:text-green-400 tracking-tight leading-normal">{formatPrice(currentTotalPrice)}</span>
-                                </div>
-                            </div>
-
-                            {/* Servicio y Profesional */}
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                <div className="flex flex-col gap-2">
-                                    <label className="text-sm font-bold text-text-main-light dark:text-text-main-dark">Servicio</label>
-                                    <div className="relative">
-                                        <span className="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-text-sec-light">spa</span>
-                                        <select
-                                            value={service}
-                                            onChange={(e) => setService(e.target.value)}
-                                            className="w-full rounded-xl border border-border-light dark:border-border-dark bg-background-light dark:bg-background-dark pl-10 pr-4 h-12 text-sm focus:border-primary focus:ring-1 focus:ring-primary dark:text-white outline-none transition-all appearance-none truncate"
-                                        >
-                                            {Array.from(new Set(services.map(s => s.category))).map(cat => (
-                                                <optgroup key={cat} label={cat}>
-                                                    {services.filter(s => s.category === cat).map(s => (
-                                                        <option key={s.id} value={s.name}>{s.name}</option>
-                                                    ))}
-                                                </optgroup>
-                                            ))}
-                                        </select>
-                                        <span className="material-symbols-outlined absolute right-3 top-1/2 -translate-y-1/2 text-text-sec-light pointer-events-none">expand_more</span>
-                                    </div>
-
-                                    {/* NEW REMOVAL SELECTOR UI */}
-                                    {!service.includes('Retiro') && !service.includes('Corte') && !service.includes('Masaje') && !service.includes('Depilación') && !service.includes('Epilación') && (
-                                        <div className="mt-2 p-3 bg-gray-50 dark:bg-card-dark rounded-xl border border-dashed border-gray-200 dark:border-gray-700">
-                                            <span className="block text-xs font-bold text-text-sec-light dark:text-text-sec-dark uppercase mb-2">¿Incluir Retiro? (+30m)</span>
-                                            <div className="grid grid-cols-2 gap-2">
-                                                <button
-                                                    type="button"
-                                                    onClick={() => setRemovalType('')}
-                                                    className={`px-2 py-2 text-xs rounded-lg font-bold border transition-all ${removalType === ''
-                                                        ? 'bg-gray-200 dark:bg-gray-700 text-gray-800 dark:text-white border-gray-300 dark:border-gray-600'
-                                                        : 'bg-white dark:bg-background-dark text-gray-500 border-transparent hover:border-gray-200'
-                                                        }`}
-                                                >
-                                                    No
-                                                </button>
-                                                <button
-                                                    type="button"
-                                                    onClick={() => setRemovalType('semi')}
-                                                    className={`px-2 py-2 text-xs rounded-lg font-bold border transition-all truncate ${removalType === 'semi'
-                                                        ? 'bg-primary text-white border-primary shadow-sm'
-                                                        : 'bg-white dark:bg-background-dark text-gray-600 dark:text-gray-400 border-gray-200 dark:border-gray-700 hover:border-primary/50'
-                                                        }`}
-                                                >
-                                                    Semi/Press (+$10k)
-                                                </button>
-                                                <button
-                                                    type="button"
-                                                    onClick={() => setRemovalType('acrylic')}
-                                                    className={`px-2 py-2 text-xs rounded-lg font-bold border transition-all truncate ${removalType === 'acrylic'
-                                                        ? 'bg-purple-500 text-white border-purple-500 shadow-sm'
-                                                        : 'bg-white dark:bg-background-dark text-gray-600 dark:text-gray-400 border-gray-200 dark:border-gray-700 hover:border-purple-500/50'
-                                                        }`}
-                                                >
-                                                    Acrílico (+$15k)
-                                                </button>
-                                                <button
-                                                    type="button"
-                                                    onClick={() => setRemovalType('feet')}
-                                                    className={`px-2 py-2 text-xs rounded-lg font-bold border transition-all truncate ${removalType === 'feet'
-                                                        ? 'bg-teal-500 text-white border-teal-500 shadow-sm'
-                                                        : 'bg-white dark:bg-background-dark text-gray-600 dark:text-gray-400 border-gray-200 dark:border-gray-700 hover:border-teal-500/50'
-                                                        }`}
-                                                >
-                                                    Pies (+$8k)
-                                                </button>
+                                    {/* Resumen Card */}
+                                    <div className="w-full bg-slate-50 dark:bg-slate-800/50 rounded-2xl p-6 border border-slate-100 dark:border-slate-800 mb-8 shadow-sm">
+                                        <div className="flex justify-between items-start mb-6">
+                                            <div className="flex flex-col gap-1">
+                                                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Servicio</span>
+                                                <span className="text-xl font-bold text-slate-800 dark:text-white leading-tight">{bookedApptDetails.service}</span>
+                                            </div>
+                                            <div className="flex flex-col items-end gap-1">
+                                                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Precio</span>
+                                                <span className="text-2xl font-black text-green-600 dark:text-green-400 tracking-tight">{bookedApptDetails.price}</span>
                                             </div>
                                         </div>
-                                    )}
-                                </div>
-
-                                <div className="flex flex-col gap-2">
-                                    <label className="text-sm font-bold text-text-main-light dark:text-text-main-dark">Profesional</label>
-                                    <div className="relative">
-                                        <span className="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-text-sec-light">badge</span>
-                                        <select
-                                            value={selectedProfessionalId}
-                                            onChange={(e) => setSelectedProfessionalId(Number(e.target.value))}
-                                            required
-                                            className="w-full rounded-xl border border-border-light dark:border-border-dark bg-background-light dark:bg-background-dark pl-10 pr-4 h-12 text-sm focus:border-primary focus:ring-1 focus:ring-primary dark:text-white outline-none transition-all appearance-none"
-                                        >
-                                            <option value="" disabled>Seleccionar...</option>
-                                            {availableProfessionals.map(pro => (
-                                                <option key={pro.id} value={pro.id}>{pro.name}</option>
-                                            ))}
-                                        </select>
-                                        <span className="material-symbols-outlined absolute right-3 top-1/2 -translate-y-1/2 text-text-sec-light pointer-events-none">expand_more</span>
+                                        <div className="h-px bg-slate-200 dark:bg-slate-700 w-full mb-6"></div>
+                                        <div className="grid grid-cols-2 gap-6">
+                                            <div className="flex flex-col gap-1">
+                                                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Fecha y Hora</span>
+                                                <span className="text-sm font-bold text-slate-700 dark:text-gray-200 capitalize">
+                                                    {bookedApptDetails.date?.toLocaleDateString('es-ES', { weekday: 'long', day: 'numeric', month: 'long' })} • {bookedApptDetails.time}
+                                                </span>
+                                            </div>
+                                            <div className="flex flex-col gap-1 items-end">
+                                                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest text-right">Especialista</span>
+                                                <span className="text-sm font-bold text-primary text-right">{bookedApptDetails.professionalName}</span>
+                                            </div>
+                                        </div>
                                     </div>
-                                </div>
-                            </div>
 
-                            <div className="border-t border-border-light dark:border-border-dark my-1"></div>
-
-                            {/* Date Selection Grid */}
-                            <div className="flex flex-col gap-2">
-                                <label className="text-sm font-bold text-text-main-light dark:text-text-main-dark flex items-center gap-2">
-                                    <span className="material-symbols-outlined text-primary text-[18px]">calendar_month</span>
-                                    Selecciona Fecha Disponible
-                                </label>
-                                <div className="flex overflow-x-auto gap-2 pb-2 scrollbar-hide snap-x">
-                                    {availableDays.length > 0 ? (
-                                        availableDays.map((date, idx) => (
-                                            <button
-                                                type="button"
-                                                key={idx}
-                                                onClick={() => setSelectedDate(date)}
-                                                className={`snap-start shrink-0 flex flex-col items-center justify-center w-16 h-20 rounded-xl border transition-all duration-200 ${isDateSelected(date)
-                                                    ? 'bg-primary border-primary text-white shadow-lg shadow-primary/30 scale-105'
-                                                    : 'bg-white dark:bg-card-dark border-border-light dark:border-border-dark hover:border-primary text-text-sec-light dark:text-text-sec-dark hover:bg-primary/5'
-                                                    }`}
+                                    <div className="flex flex-col gap-3 w-full">
+                                        {successLink && (
+                                            <a
+                                                href={successLink}
+                                                target="_blank"
+                                                rel="noopener noreferrer"
+                                                className="w-full py-4 bg-white dark:bg-slate-800 border-2 border-slate-100 dark:border-slate-700 rounded-xl font-bold text-slate-700 dark:text-white flex items-center justify-center gap-3 hover:bg-slate-50 dark:hover:bg-slate-700 transition-all shadow-sm active:scale-95"
                                             >
-                                                <span className="text-xs font-medium uppercase">{date.toLocaleDateString('es-ES', { weekday: 'short' })}</span>
-                                                <span className="text-xl font-black mt-1">{date.getDate()}</span>
-                                            </button>
-                                        ))
-                                    ) : (
-                                        <div className="w-full text-center py-4 text-sm text-gray-500 bg-gray-50 dark:bg-gray-800 rounded-xl border border-dashed border-gray-200 dark:border-gray-700">
-                                            No hay fechas disponibles próximas según el horario de apertura.
-                                        </div>
-                                    )}
-                                </div>
-                            </div>
-
-                            {/* Time Selection Grid */}
-                            <div className={`flex flex-col gap-2 transition-opacity duration-300 ${selectedDate ? 'opacity-100' : 'opacity-50 pointer-events-none'}`}>
-                                <div className="flex items-center justify-between">
-                                    <label className="text-sm font-bold text-text-main-light dark:text-text-main-dark flex items-center gap-2">
-                                        <span className="material-symbols-outlined text-primary text-[18px]">schedule</span>
-                                        Selecciona Hora
-                                        {!selectedDate && <span className="text-xs font-normal text-red-500 ml-2">(Elige una fecha primero)</span>}
-                                        {/* Display Estimated Duration */}
-                                        <span className="text-xs font-bold bg-blue-100 text-blue-700 px-2 py-0.5 rounded ml-2">Duración: {formatDuration(currentDurationMinutes)}</span>
-                                    </label>
-
-                                    {/* Leyenda de Disponibilidad */}
-                                    <div className="flex gap-3 text-[10px] text-text-sec-light dark:text-text-sec-dark">
-                                        <div className="flex items-center gap-1"><span className="size-2 rounded-full bg-white border border-gray-300"></span>Libre</div>
-                                        <div className="flex items-center gap-1"><span className="size-2 rounded-full bg-primary"></span>Elegido</div>
-                                        <div className="flex items-center gap-1"><span className="size-2 rounded-full bg-gray-100 dark:bg-gray-700 border border-gray-200"></span>Ocupado</div>
+                                                <img src="https://www.gstatic.com/calendar/images/dynamiclogo_2020q4/calendar_31_2x.png" className="w-6 h-6" alt="Google Calendar" />
+                                                Agregar a Google Calendar
+                                            </a>
+                                        )}
+                                        <button
+                                            onClick={resetModal}
+                                            className="w-full py-4 bg-primary text-white rounded-xl font-bold text-lg shadow-lg shadow-primary/20 hover:bg-primary/90 transition-all active:scale-95"
+                                        >
+                                            Entendido
+                                        </button>
                                     </div>
                                 </div>
+                            ) : (
+                                // THE FORM (Identical to Agenda.tsx)
+                                <form onSubmit={handleCreateAppointment} className="p-6 flex flex-col gap-6">
+                                    {/* Price Banner Unificado */}
+                                    <div className="flex items-center justify-center bg-green-50 dark:bg-green-900/10 border border-green-200 dark:border-green-800 rounded-2xl p-6 relative overflow-hidden group">
+                                        <div className="absolute inset-0 bg-green-500/5 translate-y-full group-hover:translate-y-0 transition-transform duration-500"></div>
+                                        <div className="text-center relative z-10">
+                                            <span className="block text-xs font-bold text-green-600 dark:text-green-400 uppercase tracking-widest mb-1">Valor Estimado del Servicio</span>
+                                            <span className="block text-5xl font-black text-green-600 dark:text-green-400 tracking-tight leading-relaxed">{formatPrice(currentTotalPrice)}</span>
+                                        </div>
+                                    </div>
 
-                                <div className="grid grid-cols-4 gap-2">
-                                    {timeSlots.length > 0 ? (
-                                        timeSlots.map((time) => {
-                                            const isOccupied = isSlotOccupied(time);
-                                            return (
+                                    {formError && (
+                                        <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 text-red-600 dark:text-red-300 p-4 rounded-xl flex gap-3 animate-in fade-in slide-in-from-top-1">
+                                            <span className="material-symbols-outlined shrink-0">error</span>
+                                            <div className="flex flex-col">
+                                                <span className="font-bold text-sm">No se pudo agendar la cita</span>
+                                                <span className="text-xs">{formError}</span>
+                                            </div>
+                                        </div>
+                                    )}
+
+                                    {/* Datos Cliente */}
+                                    <div className="flex flex-col gap-4">
+                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                            <div className="flex flex-col gap-2">
+                                                <label className="text-sm font-bold text-slate-700 dark:text-slate-300 ml-1">Celular del Cliente</label>
+                                                <div className="relative group">
+                                                    <span className="material-symbols-outlined absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-primary transition-colors">smartphone</span>
+                                                    <input
+                                                        required
+                                                        type="tel"
+                                                        pattern="[0-9]{10}"
+                                                        maxLength={10}
+                                                        value={clientPhone}
+                                                        onChange={handlePhoneChange}
+                                                        placeholder="Ej: 3001234567"
+                                                        className="w-full rounded-xl border-2 border-slate-100 dark:border-border-dark bg-slate-50/50 dark:bg-background-dark pl-12 pr-4 h-14 text-base focus:border-primary focus:bg-white dark:focus:bg-background-dark outline-none transition-all dark:text-white"
+                                                    />
+                                                </div>
+                                            </div>
+                                            <div className="flex flex-col gap-2">
+                                                <label className="text-sm font-bold text-slate-700 dark:text-slate-300 ml-1">Correo Electrónico</label>
+                                                <div className="relative group">
+                                                    <span className="material-symbols-outlined absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-primary transition-colors">mail</span>
+                                                    <input
+                                                        required
+                                                        type="email"
+                                                        value={clientEmail}
+                                                        onChange={(e) => setClientEmail(e.target.value)}
+                                                        placeholder="cliente@correo.com"
+                                                        className="w-full rounded-xl border-2 border-slate-100 dark:border-border-dark bg-slate-50/50 dark:bg-background-dark pl-12 pr-4 h-14 text-base focus:border-primary focus:bg-white dark:focus:bg-background-dark outline-none transition-all dark:text-white"
+                                                    />
+                                                </div>
+                                            </div>
+                                        </div>
+
+                                        <div className="flex flex-col gap-2">
+                                            <label className="text-sm font-bold text-slate-700 dark:text-slate-300 ml-1">Nombre Completo</label>
+                                            <div className="relative group">
+                                                <span className="material-symbols-outlined absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-primary transition-colors">person</span>
+                                                <input
+                                                    required
+                                                    type="text"
+                                                    value={clientName}
+                                                    onChange={(e) => setClientName(e.target.value)}
+                                                    placeholder="Nombre del cliente"
+                                                    className="w-full rounded-xl border-2 border-slate-100 dark:border-border-dark bg-slate-50/50 dark:bg-background-dark pl-12 pr-4 h-14 text-base focus:border-primary focus:bg-white dark:focus:bg-background-dark outline-none transition-all dark:text-white"
+                                                    readOnly={!!existingClient}
+                                                />
+                                                {existingClient && <span className="absolute right-4 top-1/2 -translate-y-1/2 text-[10px] font-black text-primary bg-primary/5 px-2 py-1 rounded-lg uppercase tracking-widest">Cliente Frecuente</span>}
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    {/* Servicio y Profesional */}
+                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                        <div className="flex flex-col gap-2">
+                                            <label className="text-sm font-bold text-slate-700 dark:text-slate-300 ml-1">Tratamiento o Servicio</label>
+                                            <div className="relative group">
+                                                <span className="material-symbols-outlined absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-primary transition-colors">spa</span>
+                                                <select
+                                                    value={service}
+                                                    onChange={(e) => setService(e.target.value)}
+                                                    required
+                                                    className="w-full rounded-xl border-2 border-slate-100 dark:border-border-dark bg-slate-50/50 dark:bg-background-dark pl-12 pr-10 h-14 text-base focus:border-primary focus:bg-white dark:focus:bg-background-dark outline-none transition-all appearance-none dark:text-white truncate"
+                                                >
+                                                    <option value="" disabled>Selecciona un servicio...</option>
+                                                    {Array.from(new Set(services.map(s => s.category))).map(cat => (
+                                                        <optgroup key={cat} label={cat} className="font-bold text-primary italic bg-white dark:bg-card-dark">
+                                                            {services.filter(s => s.category === cat).map(s => (
+                                                                <option key={s.id} value={s.name} className="font-normal text-slate-700 dark:text-white not-italic">{s.name}</option>
+                                                            ))}
+                                                        </optgroup>
+                                                    ))}
+                                                </select>
+                                                <span className="material-symbols-outlined absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none">expand_more</span>
+                                            </div>
+
+                                            {/* Retiro específico selector (Solo si no es un retiro ya) */}
+                                            {service && !service.includes('Retiro') && !service.includes('Corte') && !service.includes('Masaje') && !service.includes('Depilación') && !service.includes('Epilación') && (
+                                                <div className="mt-2 p-4 bg-slate-50 dark:bg-slate-800/40 rounded-xl border-2 border-slate-100 dark:border-slate-800 border-dashed">
+                                                    <span className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-3">¿Incluir Retiro? (+30m)</span>
+                                                    <div className="grid grid-cols-2 gap-2">
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => setRemovalType('')}
+                                                            className={`px-3 py-2 text-xs rounded-lg font-bold border-2 transition-all ${removalType === ''
+                                                                ? 'bg-slate-200 dark:bg-slate-700 text-slate-800 dark:text-white border-slate-300 dark:border-slate-600'
+                                                                : 'bg-white dark:bg-slate-900 text-slate-400 border-transparent hover:border-slate-200'}`}
+                                                        >
+                                                            No
+                                                        </button>
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => setRemovalType('semi')}
+                                                            className={`px-3 py-2 text-xs rounded-lg font-bold border-2 transition-all truncate ${removalType === 'semi'
+                                                                ? 'bg-primary text-white border-primary shadow-sm'
+                                                                : 'bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-400 border-slate-100 dark:border-slate-800 hover:border-primary/50'}`}
+                                                        >
+                                                            Semi (+$10k)
+                                                        </button>
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => setRemovalType('acrylic')}
+                                                            className={`px-3 py-2 text-xs rounded-lg font-bold border-2 transition-all truncate ${removalType === 'acrylic'
+                                                                ? 'bg-purple-500 text-white border-purple-500 shadow-sm'
+                                                                : 'bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-400 border-slate-100 dark:border-slate-800 hover:border-purple-500/50'}`}
+                                                        >
+                                                            Acrílico (+$15k)
+                                                        </button>
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => setRemovalType('feet')}
+                                                            className={`px-3 py-2 text-xs rounded-lg font-bold border-2 transition-all truncate ${removalType === 'feet'
+                                                                ? 'bg-teal-500 text-white border-teal-500 shadow-sm'
+                                                                : 'bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-400 border-slate-100 dark:border-slate-800 hover:border-teal-500/50'}`}
+                                                        >
+                                                            Pies (+$8k)
+                                                        </button>
+                                                    </div>
+                                                </div>
+                                            )}
+                                        </div>
+
+                                        <div className="flex flex-col gap-2">
+                                            <label className="text-sm font-bold text-slate-700 dark:text-slate-300 ml-1">Especialista</label>
+                                            <div className="relative group">
+                                                <span className="material-symbols-outlined absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-primary transition-colors">badge</span>
+                                                <select
+                                                    value={selectedProfessionalId}
+                                                    onChange={(e) => setSelectedProfessionalId(Number(e.target.value))}
+                                                    required
+                                                    className="w-full rounded-xl border-2 border-slate-100 dark:border-border-dark bg-slate-50/50 dark:bg-background-dark pl-12 pr-10 h-14 text-base focus:border-primary focus:bg-white dark:focus:bg-background-dark outline-none transition-all appearance-none dark:text-white"
+                                                >
+                                                    <option value="" disabled>Selecciona profesional...</option>
+                                                    {availableProfessionals.map(pro => (
+                                                        <option key={pro.id} value={pro.id}>{pro.name}</option>
+                                                    ))}
+                                                </select>
+                                                <span className="material-symbols-outlined absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none">expand_more</span>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    {/* Fecha */}
+                                    <div className="flex flex-col gap-3">
+                                        <div className="flex items-center justify-between ml-1">
+                                            <label className="text-sm font-bold text-slate-700 dark:text-slate-300 flex items-center gap-2">
+                                                <span className="material-symbols-outlined text-primary text-[20px]">calendar_today</span>
+                                                Día del Servicio
+                                            </label>
+                                        </div>
+                                        <div className="flex gap-3 overflow-x-auto pb-4 scrollbar-hide snap-x">
+                                            {availableDays.map((date, idx) => (
                                                 <button
                                                     type="button"
-                                                    key={time}
-                                                    disabled={isOccupied}
-                                                    onClick={() => {
-                                                        if (!isOccupied) setSelectedTime(time);
-                                                    }}
-                                                    className={`py-2 rounded-lg text-sm font-bold border transition-all relative overflow-hidden ${selectedTime === time
-                                                        ? 'bg-primary border-primary text-white shadow-md z-10'
-                                                        : isOccupied
-                                                            ? 'bg-gray-100 dark:bg-gray-800 border-gray-200 dark:border-gray-700 text-gray-400 dark:text-gray-600 cursor-not-allowed'
-                                                            : 'bg-white dark:bg-card-dark border-border-light dark:border-border-dark text-text-main-light dark:text-text-main-dark hover:bg-primary/10 hover:border-primary'
-                                                        }`}
+                                                    key={idx}
+                                                    onClick={() => setSelectedDate(date)}
+                                                    className={`snap-start shrink-0 flex flex-col items-center justify-center w-[72px] h-[88px] rounded-2xl border-2 transition-all duration-300
+                                                        ${selectedDate?.toDateString() === date.toDateString()
+                                                            ? 'bg-primary border-primary text-white shadow-xl shadow-primary/30 scale-105 mr-1'
+                                                            : 'bg-white dark:bg-slate-900 border-slate-100 dark:border-slate-800 text-slate-400 hover:border-primary/40 hover:bg-primary/5 mr-1'}`}
                                                 >
-                                                    {time}
-                                                    {isOccupied && <span className="absolute inset-0 flex items-center justify-center bg-gray-200/50 dark:bg-black/50"><span className="material-symbols-outlined text-xs">block</span></span>}
+                                                    <span className="text-[10px] font-black uppercase tracking-widest">{date.toLocaleDateString('es-ES', { weekday: 'short' })}</span>
+                                                    <span className="text-2xl font-black mt-1 leading-none">{date.getDate()}</span>
+                                                    <small className="text-[9px] mt-1 font-bold opacity-60 uppercase">{date.toLocaleDateString('es-ES', { month: 'short' })}</small>
                                                 </button>
-                                            );
-                                        })
-                                    ) : (
-                                        selectedDate && (
-                                            <div className="col-span-4 text-center py-4 text-sm text-orange-500 bg-orange-50 dark:bg-orange-900/20 rounded-xl border border-orange-100 dark:border-orange-900/30">
-                                                No hay horarios disponibles para este día con la duración requerida ({formatDuration(currentDurationMinutes)}).
-                                            </div>
-                                        )
-                                    )}
-                                </div>
-                            </div>
+                                            ))}
+                                        </div>
+                                    </div>
 
-                            <div className="flex gap-3 mt-4 pt-4 border-t border-border-light dark:border-border-dark">
-                                <button
-                                    type="button"
-                                    onClick={() => setIsModalOpen(false)}
-                                    disabled={isSubmitting}
-                                    className="flex-1 py-3 rounded-xl font-bold text-text-sec-light dark:text-text-sec-dark hover:bg-background-light dark:hover:bg-background-dark transition-colors disabled:opacity-50"
-                                >
-                                    Cancelar
-                                </button>
-                                <button
-                                    type="submit"
-                                    disabled={!selectedDate || !selectedTime || !clientName || !clientEmail || clientPhone.length < 10 || !selectedProfessionalId || isSubmitting}
-                                    className="flex-1 py-3 rounded-xl bg-primary text-white font-bold hover:bg-primary/90 transition-colors shadow-lg shadow-primary/20 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
-                                >
-                                    {isSubmitting ? (
-                                        <>
-                                            <span className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></span>
-                                            <span>Procesando...</span>
-                                        </>
-                                    ) : (
-                                        <>
-                                            <span className="material-symbols-outlined text-[20px]">send</span>
-                                            <span>Agendar y Enviar</span>
-                                        </>
-                                    )}
-                                </button>
-                            </div>
-                        </form>
+                                    {/* Horarios */}
+                                    <div className="flex flex-col gap-3">
+                                        <div className="flex items-center justify-between ml-1">
+                                            <label className="text-sm font-bold text-slate-700 dark:text-slate-300 flex items-center gap-2">
+                                                <span className="material-symbols-outlined text-primary text-[20px]">schedule</span>
+                                                Hora Disponible
+                                                {service && <span className="text-[10px] font-black bg-blue-100 text-blue-600 px-2.5 py-1 rounded-full ml-3 uppercase tracking-wider">{formatDuration(currentDurationMinutes)}</span>}
+                                            </label>
+                                        </div>
+
+                                        {!selectedDate ? (
+                                            <div className="p-10 border-2 border-dashed border-slate-100 dark:border-slate-800 rounded-2xl flex flex-col items-center gap-2 opacity-60">
+                                                <span className="material-symbols-outlined text-3xl text-slate-300">calendar_month</span>
+                                                <p className="text-sm font-bold text-slate-400">Selecciona un día primero</p>
+                                            </div>
+                                        ) : (
+                                            <div className="grid grid-cols-4 gap-2.5">
+                                                {timeSlots.map((time) => {
+                                                    const isOccupied = isSlotOccupied(time);
+                                                    const isSelected = selectedTime === time;
+                                                    return (
+                                                        <button
+                                                            type="button"
+                                                            key={time}
+                                                            disabled={isOccupied}
+                                                            onClick={() => setSelectedTime(time)}
+                                                            className={`py-3 rounded-xl text-sm font-bold border-2 transition-all relative overflow-hidden active:scale-95
+                                                                ${isSelected
+                                                                    ? 'bg-primary border-primary text-white shadow-lg z-10'
+                                                                    : isOccupied
+                                                                        ? 'bg-slate-50 dark:bg-slate-800/40 border-transparent text-slate-300 dark:text-slate-600 cursor-not-allowed opacity-40'
+                                                                        : 'bg-white dark:bg-slate-900 border-slate-100 dark:border-slate-800 text-slate-600 dark:text-slate-400 hover:border-primary hover:text-primary hover:bg-primary/5'}`}
+                                                        >
+                                                            {time}
+                                                            {isOccupied && <span className="absolute inset-0 flex items-center justify-center bg-slate-100/30 dark:bg-black/20"><span className="material-symbols-outlined text-sm">block</span></span>}
+                                                        </button>
+                                                    );
+                                                })}
+                                            </div>
+                                        )}
+                                    </div>
+
+                                    {/* Action Buttons */}
+                                    <div className="flex gap-4 mt-4 pt-6 border-t border-slate-100 dark:border-slate-800">
+                                        <button
+                                            type="button"
+                                            onClick={resetModal}
+                                            className="flex-1 py-4 font-bold text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 transition-colors"
+                                        >
+                                            Cerrar
+                                        </button>
+                                        <button
+                                            type="submit"
+                                            disabled={!selectedDate || !selectedTime || !service || !clientName || !clientEmail || clientPhone.length < 10 || !selectedProfessionalId || isSubmitting}
+                                            className="flex-[2] py-4 bg-primary text-white rounded-xl font-bold shadow-lg hover:bg-primary/90 transition-all active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 h-14"
+                                        >
+                                            {isSubmitting ? (
+                                                <>
+                                                    <span className="animate-spin rounded-full h-5 w-5 border-b-2 border-white"></span>
+                                                    <span>Procesando...</span>
+                                                </>
+                                            ) : (
+                                                <>
+                                                    <span className="material-symbols-outlined text-[22px]">calendar_add_on</span>
+                                                    <span>Agendar Cita</span>
+                                                </>
+                                            )}
+                                        </button>
+                                    </div>
+                                </form>
+                            )}
+                        </div>
                     </div>
                 </div>
             )}
