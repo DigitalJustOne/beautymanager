@@ -8,7 +8,9 @@ interface AuthContextType {
     role: string | null;
     profile: any | null;
     loading: boolean;
+    error: string | null;
     signOut: () => Promise<void>;
+    refreshProfile: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -22,6 +24,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const [role, setRole] = useState<string | null>(null);
     const [profile, setProfile] = useState<any>(null);
     const [loading, setLoading] = useState(true);
+    const [error, setError] = useState<string | null>(null);
     const isMounted = useRef(true);
 
     // Cache helpers - simple and safe
@@ -121,10 +124,21 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             }
 
             return false;
-        } catch (e) {
+        } catch (e: any) {
             console.error("fetchProfile error:", e);
+            if (isMounted.current) {
+                setError(e.message || 'Error loading profile');
+            }
             return false;
         }
+    };
+
+    const refreshProfile = async () => {
+        if (!user) return;
+        setLoading(true);
+        setError(null);
+        await fetchProfile(user.id, user.email || '');
+        setLoading(false);
     };
 
     useEffect(() => {
@@ -227,7 +241,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     };
 
     return (
-        <AuthContext.Provider value={{ session, user, role, loading, signOut, profile }}>
+        <AuthContext.Provider value={{ session, user, role, loading, error, signOut, profile, refreshProfile }}>
             {children}
         </AuthContext.Provider>
     );

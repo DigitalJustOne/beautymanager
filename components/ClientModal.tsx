@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { supabase } from '../services/supabase';
+import { compressImage } from '../utils/imageCompression';
 
 interface ClientModalProps {
     isOpen: boolean;
@@ -46,10 +47,20 @@ const ClientModal: React.FC<ClientModalProps> = ({ isOpen, onClose, clientToEdit
         if (!file) return;
 
         try {
-            const fileName = `${Date.now()}_${file.name.replace(/\s/g, '_')}`;
+            // Compress image before upload
+            const compressedBlob = await compressImage(file, 500, 0.7); // Resize to max 500px, 0.7 quality
+            const compressedFile = new File([compressedBlob], file.name, { type: 'image/jpeg' });
+
+            // Sanitize filename
+            const cleanName = file.name.replace(/[^a-zA-Z0-9]/g, '');
+            const fileName = `${Date.now()}_${cleanName}.jpg`; // Force .jpg extension as we convert to jpeg
+
             const { data, error } = await supabase.storage
                 .from('avatars')
-                .upload(fileName, file);
+                .upload(fileName, compressedFile, {
+                    contentType: 'image/jpeg',
+                    upsert: true
+                });
 
             if (error) throw error;
 

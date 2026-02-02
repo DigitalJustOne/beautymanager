@@ -21,13 +21,14 @@ const Login: React.FC = () => {
     // Show loading screen if auth is still checking the initial session
     const isInitialAuthCheck = authLoading && !formLoading;
 
-    // Only redirect if we have a session AND a role already (e.g., coming back to page)
+    // Redirect if we have a session (Profile loading will be handled by the ProtectedRoute)
     React.useEffect(() => {
-        if (session && role) {
-            console.log("Login: Redirecting role", role);
+        if (session) {
+            console.log("Login: Session active, redirecting...");
             if (role === 'admin') navigate('/');
             else if (role === 'professional') navigate('/professional');
-            else navigate('/client');
+            else if (role === 'client') navigate('/client');
+            else navigate('/'); // Default to root if role not loaded yet, let ProtectedRoute handle it
         }
     }, [session, role, navigate]);
 

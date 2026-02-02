@@ -6,9 +6,10 @@ interface ClientDetailsModalProps {
     client: any;
     isAdmin: boolean;
     onDelete?: (clientId: number) => void;
+    completedServicesCount?: number;
 }
 
-const ClientDetailsModal: React.FC<ClientDetailsModalProps> = ({ isOpen, onClose, client, isAdmin, onDelete }) => {
+const ClientDetailsModal: React.FC<ClientDetailsModalProps> = ({ isOpen, onClose, client, isAdmin, onDelete, completedServicesCount = 0 }) => {
     if (!isOpen || !client) return null;
 
     return (
@@ -73,14 +74,14 @@ const ClientDetailsModal: React.FC<ClientDetailsModalProps> = ({ isOpen, onClose
                             </div>
                         </div>
 
-                        {/* Last Visit */}
+                        {/* Puntos Acumulados (Formerly Last Visit) */}
                         <div className="flex items-center gap-4 bg-slate-50 dark:bg-slate-800/50 p-4 rounded-3xl border border-slate-100 dark:border-slate-700 shadow-sm">
                             <div className="size-11 rounded-2xl bg-purple-100 dark:bg-purple-900/30 flex items-center justify-center text-purple-600 dark:text-purple-400 shrink-0">
-                                <span className="material-symbols-outlined">event_available</span>
+                                <span className="material-symbols-outlined">loyalty</span>
                             </div>
                             <div>
-                                <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Última Visita</p>
-                                <p className="font-bold text-sm text-slate-700 dark:text-slate-200">{client.lastVisit || 'Sin registros'}</p>
+                                <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Puntos Acumulados</p>
+                                <p className="font-bold text-sm text-slate-700 dark:text-slate-200">{completedServicesCount} pts</p>
                             </div>
                         </div>
                     </div>

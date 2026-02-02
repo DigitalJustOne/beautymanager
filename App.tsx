@@ -17,7 +17,7 @@ import { AuthProvider, useAuth } from './context/AuthContext';
 import { supabase } from './services/supabase';
 
 const ProtectedRoute = ({ children, allowedRoles }: { children: React.ReactElement, allowedRoles?: string[] }) => {
-    const { session, role, loading } = useAuth();
+    const { session, role, loading, error, refreshProfile, signOut } = useAuth();
 
     if (loading) {
         return (
@@ -31,7 +31,32 @@ const ProtectedRoute = ({ children, allowedRoles }: { children: React.ReactEleme
         return <Navigate to="/login" replace />;
     }
 
-    // If allowe dRoles are specified and user has a role that's not in the list
+    if (error) {
+        return (
+            <div className="flex flex-col items-center justify-center h-screen bg-background-light dark:bg-background-dark p-4">
+                <div className="bg-red-50 dark:bg-red-900/20 p-6 rounded-lg max-w-md w-full text-center">
+                    <h3 className="text-red-700 dark:text-red-300 font-bold mb-2">Error de Sesión</h3>
+                    <p className="text-red-600 dark:text-red-400 mb-4">{error}</p>
+                    <div className="flex gap-2 justify-center">
+                        <button
+                            onClick={() => refreshProfile()}
+                            className="bg-primary text-white px-4 py-2 rounded hover:opacity-90 transition-opacity"
+                        >
+                            Reintentar
+                        </button>
+                        <button
+                            onClick={() => signOut()}
+                            className="bg-gray-200 dark:bg-gray-700 text-gray-800 dark:text-gray-200 px-4 py-2 rounded hover:opacity-90 transition-opacity"
+                        >
+                            Cerrar Sesión
+                        </button>
+                    </div>
+                </div>
+            </div>
+        );
+    }
+
+    // If allowedRoles are specified and user has a role that's not in the list
     if (allowedRoles && role && !allowedRoles.includes(role)) {
         // Redirect to the correct dashboard based on user's role
         if (role === 'admin') return <Navigate to="/" replace />;
@@ -40,10 +65,27 @@ const ProtectedRoute = ({ children, allowedRoles }: { children: React.ReactEleme
     }
 
     // If role is not loaded yet but we have session, it means profile fetch failed or is invalid
-    // Don't wait forever, redirect to login to force refresh/retry
     if (allowedRoles && !role) {
-        console.warn("Session active but no role found. Redirecting to login.");
-        return <Navigate to="/login" replace />;
+        return (
+            <div className="flex flex-col items-center justify-center h-screen bg-background-light dark:bg-background-dark p-4">
+                <h3 className="text-xl font-semibold mb-2 text-text-primary-light dark:text-text-primary-dark">Completando perfil...</h3>
+                <p className="text-text-secondary-light dark:text-text-secondary-dark mb-4">No se pudo cargar tu información de usuario.</p>
+                <div className="flex gap-2">
+                    <button
+                        onClick={() => refreshProfile()}
+                        className="bg-primary text-white px-4 py-2 rounded hover:opacity-90 transition-opacity"
+                    >
+                        Reintentar
+                    </button>
+                    <button
+                        onClick={() => signOut()}
+                        className="bg-gray-200 dark:bg-gray-700 text-gray-800 dark:text-gray-200 px-4 py-2 rounded hover:opacity-90 transition-opacity"
+                    >
+                        Cerrar Sesión
+                    </button>
+                </div>
+            </div>
+        );
     }
 
     return children;

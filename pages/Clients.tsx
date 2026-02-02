@@ -5,7 +5,7 @@ import ClientModal from '../components/ClientModal';
 import ClientDetailsModal from '../components/ClientDetailsModal';
 
 const Clients: React.FC = () => {
-    const { clients, addClient, updateClient, deleteClient, userProfile } = useData();
+    const { clients, appointments, addClient, updateClient, deleteClient, userProfile } = useData();
     const isAdmin = userProfile.role === 'admin';
 
     // Modal States
@@ -258,6 +258,11 @@ const Clients: React.FC = () => {
                 client={selectedClient}
                 isAdmin={isAdmin}
                 onDelete={deleteClient}
+                completedServicesCount={selectedClient ? appointments.filter(a =>
+                    a.clientId === selectedClient.id &&
+                    a.status === 'confirmed' &&
+                    (a.date ? new Date(a.date) < new Date() : false)
+                ).length : 0}
             />
         </div>
     );

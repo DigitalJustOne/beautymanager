@@ -1,6 +1,7 @@
 import React, { useState, useRef } from 'react';
 import { useData } from '../context/DataContext';
 import { supabase } from '../services/supabase';
+import { compressImage } from '../utils/imageCompression';
 
 const Settings: React.FC = () => {
     const { userProfile, updateUserProfile } = useData();
@@ -36,14 +37,41 @@ const Settings: React.FC = () => {
         setFormData(prev => ({ ...prev, schedule: newSchedule }));
     };
 
-    const handlePhotoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const handlePhotoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
         const file = e.target.files?.[0];
         if (file) {
-            const reader = new FileReader();
-            reader.onloadend = () => {
-                setFormData(prev => ({ ...prev, avatar: reader.result as string }));
-            };
-            reader.readAsDataURL(file);
+            try {
+                // Compression
+                const compressedBlob = await compressImage(file, 500, 0.7);
+                // const compressedFile = new File([compressedBlob], file.name, { type: 'image/jpeg' }); // No longer needed
+
+                // Sanitize filename
+                const cleanEmail = userProfile.email?.replace(/[^a-zA-Z0-9]/g, '') || 'user';
+                const fileName = `profile_${cleanEmail}_${Date.now()}.jpg`;
+
+                console.log(`Uploading ${fileName} (Size: ${compressedBlob.size} bytes)`);
+
+                // Upload Blob directly
+                const { error: uploadError } = await supabase.storage
+                    .from('avatars')
+                    .upload(fileName, compressedBlob, {
+                        contentType: 'image/jpeg',
+                        upsert: true,
+                        cacheControl: '3600'
+                    });
+
+                if (uploadError) throw uploadError;
+
+                // Get Public URL
+                const { data: { publicUrl } } = supabase.storage
+                    .from('avatars')
+                    .getPublicUrl(fileName);
+
+                setFormData(prev => ({ ...prev, avatar: publicUrl }));
+            } catch (error: any) {
+                console.error("Error uploading profile photo:", error);
+                alert(`Error al subir la imagen: ${error.message || error.error_description || 'Error desconocido'}`);
+            }
         }
     };
 
