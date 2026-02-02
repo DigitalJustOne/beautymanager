@@ -1,11 +1,14 @@
 import React, { useState, useRef } from 'react';
 import { useData } from '../context/DataContext';
 import { Professional } from '../types';
+import { supabase } from '../services/supabase';
+import { compressImage } from '../utils/imageCompression';
 
 const Team: React.FC = () => {
     const { professionals, addProfessional, updateProfessional, deleteProfessional } = useData();
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [editingProId, setEditingProId] = useState<number | null>(null);
+    const [isSubmitting, setIsSubmitting] = useState(false);
     const fileInputRef = useRef<HTMLInputElement>(null);
 
     // Lista de servicios disponibles para asignar
@@ -59,26 +62,34 @@ const Team: React.FC = () => {
         setIsModalOpen(true);
     };
 
-    const handleSubmit = (e: React.FormEvent) => {
+    const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
         if (!formData.name || !formData.role || !formData.email) return;
 
-        // Note: Creation of actual Auth User requires backend trigger or manual signup.
-        // We will store the email so they can sign up.
-        if (!editingProId && formData.password) {
-            alert(`IMPORTANTE: El perfil se creará para "${formData.email}".\n\nEl usuario debe REGISTRARSE (Sign Up) usando este correo y contraseña para acceder a su dashboard.`);
-        }
+        setIsSubmitting(true);
+        try {
+            // Note: Creation of actual Auth User requires backend trigger or manual signup.
+            // We will store the email so they can sign up.
+            if (!editingProId && formData.password) {
+                alert(`IMPORTANTE: El perfil se creará para "${formData.email}".\n\nEl usuario debe REGISTRARSE (Sign Up) usando este correo y contraseña para acceder a su dashboard.`);
+            }
 
-        if (editingProId) {
-            updateProfessional(editingProId, formData);
-        } else {
-            addProfessional({
-                id: Date.now(),
-                ...formData
-            });
+            if (editingProId) {
+                await updateProfessional(editingProId, formData);
+            } else {
+                await addProfessional({
+                    id: Date.now(),
+                    ...formData
+                });
+            }
+            setIsModalOpen(false);
+            resetForm();
+        } catch (error) {
+            console.error("Error saving professional:", error);
+            alert("Error al guardar la información del profesional.");
+        } finally {
+            setIsSubmitting(false);
         }
-        setIsModalOpen(false);
-        resetForm();
     };
 
     const handleDelete = (id: number) => {
@@ -98,14 +109,40 @@ const Team: React.FC = () => {
         });
     };
 
-    const handlePhotoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const handlePhotoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
         const file = e.target.files?.[0];
         if (file) {
-            const reader = new FileReader();
-            reader.onloadend = () => {
-                setFormData(prev => ({ ...prev, avatar: reader.result as string }));
-            };
-            reader.readAsDataURL(file);
+            try {
+                setIsSubmitting(true);
+                // Compression
+                const compressedBlob = await compressImage(file, 500, 0.7);
+
+                // Sanitize filename
+                const cleanName = formData.name.replace(/[^a-zA-Z0-9]/g, '') || 'pro';
+                const fileName = `pro_${cleanName}_${Date.now()}.jpg`;
+
+                // Upload to Supabase Storage
+                const { error: uploadError } = await supabase.storage
+                    .from('avatars')
+                    .upload(fileName, compressedBlob, {
+                        contentType: 'image/jpeg',
+                        upsert: true
+                    });
+
+                if (uploadError) throw uploadError;
+
+                // Get Public URL
+                const { data: { publicUrl } } = supabase.storage
+                    .from('avatars')
+                    .getPublicUrl(fileName);
+
+                setFormData(prev => ({ ...prev, avatar: publicUrl }));
+            } catch (error) {
+                console.error("Error uploading pro photo:", error);
+                alert("Error al subir la imagen.");
+            } finally {
+                setIsSubmitting(false);
+            }
         }
     };
 
@@ -277,7 +314,13 @@ const Team: React.FC = () => {
 
                             <div className="pt-4 border-t border-gray-200 dark:border-gray-700 flex gap-3">
                                 <button type="button" onClick={() => setIsModalOpen(false)} className="flex-1 py-3 rounded-xl font-bold text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors">Cancelar</button>
-                                <button type="submit" className="flex-1 py-3 rounded-xl bg-primary text-white font-bold hover:bg-primary/90 transition-colors shadow-lg shadow-primary/20">Guardar</button>
+                                <button type="submit" disabled={isSubmitting} className="flex-1 py-3 rounded-xl bg-primary text-white font-bold hover:bg-primary/90 transition-colors shadow-lg shadow-primary/20 disabled:opacity-50 flex items-center justify-center gap-2">
+                                    {isSubmitting ? (
+                                        <span className="size-4 border-2 border-primary/30 border-t-white rounded-full animate-spin"></span>
+                                    ) : (
+                                        'Guardar'
+                                    )}
+                                </button>
                             </div>
                         </form>
                     </div>
