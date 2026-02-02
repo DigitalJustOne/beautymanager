@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { useData } from '../context/DataContext';
 import { supabase } from '../services/supabase';
 import { compressImage } from '../utils/imageCompression';
@@ -20,6 +20,23 @@ const Settings: React.FC = () => {
         isGoogleCalendarConnected: userProfile.isGoogleCalendarConnected,
         schedule: userProfile.schedule
     });
+
+    // Sincronizar el formulario cuando el perfil cargue desde el servidor
+    useEffect(() => {
+        if (userProfile.name !== 'Usuario' || userProfile.email !== '') {
+            setFormData({
+                name: userProfile.name,
+                role: userProfile.role,
+                specialty: userProfile.specialty,
+                phone: userProfile.phone,
+                email: userProfile.email,
+                avatar: userProfile.avatar,
+                city: userProfile.city || '',
+                isGoogleCalendarConnected: userProfile.isGoogleCalendarConnected,
+                schedule: userProfile.schedule
+            });
+        }
+    }, [userProfile]);
 
     // Password State
     const [newPassword, setNewPassword] = useState('');
